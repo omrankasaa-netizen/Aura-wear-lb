@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const CartContext = createContext();
-const STORAGE_KEY = 'miniyo-cart';
+const STORAGE_KEY = 'aura-cart';
 
 function loadCart() {
   if (typeof window === 'undefined') return [];

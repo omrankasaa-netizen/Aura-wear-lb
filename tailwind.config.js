@@ -63,19 +63,19 @@ module.exports = {
           border: 'hsl(var(--sidebar-border))',
           ring: 'hsl(var(--sidebar-ring))',
         },
-        /* Brand convenience aliases */
-        cream: '#FAF7F2',
-        sage: {
-          DEFAULT: '#7FA99B',
-          deep: '#2F5D57',
-        },
-        blush: '#E8C7C4',
-        charcoal: '#2B2B2B',
+        /* AURA brand tokens */
+        sale: 'hsl(var(--sale))',
+        success: 'hsl(var(--success))',
+        olive: 'hsl(var(--accent-olive))',
+        navy: 'hsl(var(--accent-navy))',
+        charcoal: 'hsl(var(--charcoal))',
+        stone: 'hsl(var(--stone))',
       },
       fontFamily: {
-        heading: ['var(--font-heading)'],
-        body: ['var(--font-body)'],
-        display: ['var(--font-display)'],
+        heading: ['Clash Display', 'var(--font-heading)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        body: ['Satoshi', 'var(--font-body)', 'system-ui', 'sans-serif'],
+        display: ['Clash Display', 'var(--font-display)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['Satoshi', 'system-ui', 'sans-serif'],
         mono: ['var(--font-mono)'],
       },
       keyframes: {

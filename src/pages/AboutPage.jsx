@@ -3,9 +3,9 @@ import { useLang } from '@/contexts/LanguageContext';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Heart } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { ArrowLeft } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { BRAND } from '@/lib/brand';
 
 export default function AboutPage() {
   const { lang, t } = useLang();
@@ -24,99 +24,61 @@ export default function AboutPage() {
   return (
     <div className="min-h-screen bg-background" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {/* Hero band */}
-      <div className="bg-primary text-primary-foreground py-16 px-4 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-white/15 rounded-3xl mb-5">
-            <Heart className="w-7 h-7 fill-white/60 text-white" />
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-heading font-bold mb-3">
-            {t('Our Story', 'قصتنا')}
-          </h1>
-          <p className="text-primary-foreground/70 text-sm max-w-md mx-auto">
-            {t(
-              'A small family, a big dream, and a lot of love — from Tripoli, for Lebanon\'s little ones.',
-              'عائلة صغيرة، حلم كبير، وكثير من المحبة — من طرابلس، لصغار لبنان.'
-            )}
-          </p>
-        </motion.div>
+      <div className="bg-charcoal text-white py-20 px-4 text-center">
+        <p className="eyebrow text-white/60 mb-4">{BRAND.tagline}</p>
+        <h1 className="font-display font-bold uppercase text-3xl sm:text-5xl tracking-tight leading-none mb-4">
+          {t('About AURA', 'عن AURA')}
+        </h1>
+        <p className="text-white/70 text-sm max-w-md mx-auto">
+          {t('Premium menswear, made for Lebanon.', 'ملابس رجالية فاخرة، صُنعت للبنان.')}
+        </p>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-10">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-12">
         <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-8">
           <ArrowLeft className={`w-4 h-4 ${lang === 'ar' ? 'rotate-180' : ''}`} />
           {t('Back to Home', 'العودة للرئيسية')}
         </Link>
 
         {content ? (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="prose prose-sm max-w-none text-foreground
-              prose-headings:font-heading prose-headings:text-foreground
-              prose-p:text-muted-foreground prose-li:text-muted-foreground
-              prose-strong:text-foreground prose-hr:border-border
-              prose-blockquote:border-primary/40 prose-blockquote:text-muted-foreground"
-          >
+          <div className="prose prose-sm max-w-none text-foreground
+            prose-headings:font-display prose-headings:uppercase prose-headings:tracking-tight prose-headings:text-foreground
+            prose-p:text-muted-foreground prose-li:text-muted-foreground
+            prose-strong:text-foreground prose-hr:border-border">
             <ReactMarkdown>{content}</ReactMarkdown>
-          </motion.div>
+          </div>
         ) : (
-          /* Fallback hard-coded story (EN) */
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="space-y-6 text-muted-foreground text-sm leading-relaxed"
-          >
+          <div className="space-y-6 text-muted-foreground text-sm leading-relaxed">
             <p>
-              MiniYo was born out of one of the hardest chapters of our lives — and somehow became
-              the most meaningful thing we've ever built.
-            </p>
-            <p>
-              We're a small family from Tripoli. Like so many people across Lebanon, the events of the
-              past few years hit us harder than we ever expected. We lost our jobs. The stability we'd
-              worked toward disappeared almost overnight.
-            </p>
-            <p>
-              We were left with two young children, a lot of uncertainty — and a choice: let it break us,
-              or build something new.
+              {t(
+                'AURA is a menswear label built in Lebanon, for the modern man who wants his everyday wardrobe to feel considered — without the markup.',
+                'AURA علامة ملابس رجالية صُنعت في لبنان، للرجل العصري الذي يريد خزانة يومية مدروسة — دون مبالغة في السعر.'
+              )}
             </p>
             <hr className="border-border" />
-            <h2 className="text-lg font-heading font-bold text-foreground">Why Clothes?</h2>
+            <h2 className="font-display font-bold uppercase tracking-tight text-foreground">{t('What we make', 'ماذا نصنع')}</h2>
             <p>
-              As parents of two little ones, we kept searching for baby clothes that were soft enough,
-              affordable enough, and actually beautiful — and kept coming up short. Parents in Lebanon
-              deserve better. So we decided to create it ourselves.
+              {t(
+                'Clean essentials, elevated basics, and matching sets — tees, polos, jeans, and the pieces that build a fit. Honest fabrics, sharp fits, and prices that make sense.',
+                'أساسيات نظيفة، قطع راقية، وأطقم متناسقة — تيشيرتات، بولو، جينز، والقطع التي تكوّن الإطلالة. أقمشة صادقة، قصّات حادة، وأسعار منطقية.'
+              )}
             </p>
             <hr className="border-border" />
-            <h2 className="text-lg font-heading font-bold text-foreground">What MiniYo Means</h2>
+            <h2 className="font-display font-bold uppercase tracking-tight text-foreground">{t('Level up your aura', 'ارفع مستوى حضورك')}</h2>
             <p>
-              <strong>MiniYo</strong> started as a nickname for our youngest — our little <em>mini me</em>.
-              It stuck. And it felt right for a brand built around one idea: children bring joy, and they
-              deserve to wear it too.
+              {t(
+                'We believe how you dress changes how you show up. AURA is here to make that effortless — delivered across Lebanon, with cash on delivery and real support on WhatsApp.',
+                'نؤمن أن طريقة لبسك تغيّر حضورك. AURA هنا لتجعل ذلك سهلاً — توصيل لكل لبنان، دفع عند الاستلام، ودعم حقيقي على واتساب.'
+              )}
             </p>
             <hr className="border-border" />
-            <p className="text-foreground font-medium">
-              Thank you for being part of our story. 🤍
-            </p>
-            <p className="text-xs text-muted-foreground">— The MiniYo Family</p>
-          </motion.div>
+            <p className="text-xs text-muted-foreground">— {t('The AURA team', 'فريق AURA')}</p>
+          </div>
         )}
 
-        {/* CTA */}
         <div className="mt-12 flex flex-col sm:flex-row gap-3">
-          <Link to="/shop"
-            className="flex-1 text-center py-3 bg-primary text-primary-foreground rounded-full text-sm font-semibold hover:bg-primary/90 transition-colors">
-            {t('Shop Now', 'تسوق الآن')}
-          </Link>
-          <Link to="/legal/contact"
-            className="flex-1 text-center py-3 border border-border rounded-full text-sm font-medium text-foreground hover:bg-muted transition-colors">
-            {t('Contact Us', 'تواصل معنا')}
-          </Link>
+          <Link to="/shop" className="btn-primary flex-1 h-12 flex items-center justify-center">{t('Shop now', 'تسوّق الآن')}</Link>
+          <Link to="/legal/contact" className="btn-outline flex-1 h-12 flex items-center justify-center">{t('Contact us', 'تواصل معنا')}</Link>
         </div>
       </div>
     </div>

@@ -12,7 +12,7 @@ export function useSiteSettings() {
   for (const s of settings) map[s.setting_key] = s.setting_value;
 
   return {
-    storeName: map.store_name || 'MiniYo',
+    storeName: map.store_name || 'AURA',
     currency: map.currency || 'USD',
     whatsappNumber: map.whatsapp_number || '',
     instagramUrl: map.instagram_url || '',
