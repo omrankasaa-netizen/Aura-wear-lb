@@ -1,14 +1,13 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useLang } from '@/contexts/LanguageContext';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { COLLECTIONS } from '@/lib/brand';
 
 export default function FeaturedCategories() {
   const { t, lang } = useLang();
-  const scrollRef = useRef(null);
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories-active'],
@@ -16,65 +15,38 @@ export default function FeaturedCategories() {
     staleTime: 60_000,
   });
 
-  if (categories.length === 0) return null;
-
-  function scroll(dir) {
-    if (scrollRef.current) scrollRef.current.scrollBy({ left: dir * 220, behavior: 'smooth' });
-  }
+  // Fall back to static AURA collections so the section is intentional pre-catalog.
+  const tiles = categories.length
+    ? categories.map((c) => ({ slug: c.slug, name: lang === 'ar' ? (c.name_ar || c.name) : c.name, image: c.image_url }))
+    : COLLECTIONS.map((c) => ({ slug: c.slug, name: c.label, image: null }));
 
   return (
-    <section className="py-12 sm:py-16 bg-background" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="flex items-center justify-between mb-7"
-        >
-          <h2 className="text-2xl sm:text-3xl font-heading font-bold text-foreground">
-            {t('Shop by category', 'تسوق حسب الفئة')}
-          </h2>
-          <div className="hidden sm:flex gap-2">
-            <button onClick={() => scroll(-1)} className="w-9 h-9 rounded-full border border-border flex items-center justify-center hover:bg-muted transition-colors">
-              <ChevronLeft className="w-4 h-4 text-muted-foreground" />
-            </button>
-            <button onClick={() => scroll(1)} className="w-9 h-9 rounded-full border border-border flex items-center justify-center hover:bg-muted transition-colors">
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            </button>
+    <section className="py-12 sm:py-16">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
+        <div className="flex items-end justify-between mb-7">
+          <div>
+            <p className="eyebrow text-muted-foreground mb-2">{t('Collections', 'المجموعات')}</p>
+            <h2 className="font-display font-bold uppercase text-2xl sm:text-3xl tracking-tight">{t('Shop the range', 'تسوّق التشكيلة')}</h2>
           </div>
-        </motion.div>
+          <Link to="/shop" className="eyebrow text-foreground hover:text-muted-foreground hidden sm:block">{t('View all', 'عرض الكل')}</Link>
+        </div>
 
-        <div
-          ref={scrollRef}
-          className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-none"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        >
-          {categories.map((cat, i) => {
-            const name = lang === 'ar' ? (cat.name_ar || cat.name) : cat.name;
-            return (
-              <motion.div
-                key={cat.id}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.4, delay: i * 0.06 }}
-                className="snap-start shrink-0"
-              >
-                <Link
-                  to={`/shop?category=${cat.id}`}
-                  className="group flex flex-col items-center gap-3 w-36 sm:w-44"
-                >
-                  <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-3xl overflow-hidden bg-accent/20 border border-border/60 shadow-sm group-hover:shadow-md group-hover:-translate-y-1 transition-all duration-300">
-                    {cat.image_url
-                      ? <img src={cat.image_url} alt={name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                      : <div className="w-full h-full flex items-center justify-center text-3xl">👶</div>}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          {tiles.map((c, i) => (
+            <motion.div key={c.slug} initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.05 }}>
+              <Link to={`/shop?category=${c.slug}`} className="group relative block aspect-square overflow-hidden bg-secondary rounded-sm">
+                {c.image ? (
+                  <img src={c.image} alt={c.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <img src="/brand/aura-mark.png" alt="" className="w-10 h-10 opacity-15" />
                   </div>
-                  <span className="text-sm font-semibold text-foreground text-center leading-tight">{name}</span>
-                </Link>
-              </motion.div>
-            );
-          })}
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                <span className="absolute bottom-3 left-3 font-display uppercase tracking-wide text-sm text-white">{c.name}</span>
+              </Link>
+            </motion.div>
+          ))}
         </div>
       </div>
     </section>

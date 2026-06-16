@@ -8,7 +8,7 @@ import AccessDenied from './AccessDenied';
 import { Settings, Save } from 'lucide-react';
 
 const DEFAULT_SETTINGS = {
-  store_name: 'MiniYo',
+  store_name: 'AURA',
   currency: 'USD',
   whatsapp_number: '',
   instagram_url: '',
@@ -86,7 +86,7 @@ export default function SiteSettingsPage() {
           {/* Store */}
           <div className="bg-card border border-border rounded-2xl p-6 space-y-4 shadow-sm">
             <h2 className="font-heading font-semibold text-foreground text-sm">Store</h2>
-            <Field label="Store Name" k="store_name" placeholder="MiniYo" />
+            <Field label="Store Name" k="store_name" placeholder="AURA" />
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Currency</label>
               <select value={form.currency || 'USD'} onChange={e => setF('currency', e.target.value)}
@@ -109,8 +109,8 @@ export default function SiteSettingsPage() {
           <div className="bg-card border border-border rounded-2xl p-6 space-y-4 shadow-sm">
             <h2 className="font-heading font-semibold text-foreground text-sm">Contact & Social</h2>
             <Field label="WhatsApp Number" k="whatsapp_number" placeholder="+961 71 000 000" hint="Include country code. Used for order notifications." />
-            <Field label="Instagram URL" k="instagram_url" placeholder="https://instagram.com/miniyo" />
-            <Field label="Facebook URL" k="facebook_url" placeholder="https://facebook.com/miniyo" />
+            <Field label="Instagram URL" k="instagram_url" placeholder="https://www.instagram.com/aura.wear.leb/" />
+            <Field label="Facebook URL" k="facebook_url" placeholder="" />
           </div>
 
           {/* Delivery */}

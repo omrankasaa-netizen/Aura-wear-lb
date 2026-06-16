@@ -19,7 +19,7 @@ export default function NewsletterStrip() {
   }
 
   const waLink = settings.whatsappNumber
-    ? `https://wa.me/${settings.whatsappNumber.replace(/\D/g, '')}?text=${encodeURIComponent(t('Hi MiniYo! I want to know about new arrivals.', 'أهلاً ميني يو! أريد معرفة المنتجات الجديدة.'))}`
+    ? `https://wa.me/${settings.whatsappNumber.replace(/\D/g, '')}?text=${encodeURIComponent(t('Hi AURA! I want to know about new arrivals.', 'أهلاً AURA! أريد معرفة المنتجات الجديدة.'))}`
     : null;
 
   return (
@@ -32,7 +32,7 @@ export default function NewsletterStrip() {
           transition={{ duration: 0.6 }}
         >
           <h2 className="text-2xl sm:text-3xl font-heading font-bold text-foreground mb-3">
-            {t('Join the MiniYo family', 'انضم إلى عائلة ميني يو')}
+            {t('Join the AURA list', 'انضم إلى قائمة AURA')}
           </h2>
           <p className="text-muted-foreground text-sm mb-7">
             {t('Get new arrivals & exclusive offers. No spam, ever — we promise 🤍', 'احصل على الوصولات الجديدة والعروض الحصرية. بدون رسائل مزعجة أبدًا، وعدنا 🤍')}

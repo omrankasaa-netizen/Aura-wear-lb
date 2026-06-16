@@ -127,7 +127,7 @@ export default function BulkUploadPage() {
       toLine(SAMPLE_ROW_2),
       toLine(SAMPLE_ROW_3),
     ].join('\n');
-    downloadCSV('miniyo_product_template.csv', lines + '\n');
+    downloadCSV('aura_product_template.csv', lines + '\n');
   }
 
   function validateRows(parsed, cats) {

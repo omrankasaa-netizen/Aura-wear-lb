@@ -30,7 +30,7 @@ export default function AdminLogin() {
             <Lock className="w-6 h-6 text-primary" />
           </div>
           <h1 className="text-2xl font-heading font-bold text-foreground">Staff Access</h1>
-          <p className="text-sm text-muted-foreground mt-1">MiniYo Admin Panel</p>
+          <p className="text-sm text-muted-foreground mt-1">AURA Admin Panel</p>
         </div>
 
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
@@ -43,7 +43,7 @@ export default function AdminLogin() {
                 onChange={e => setEmail(e.target.value)}
                 required
                 className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                placeholder="staff@miniyo.store"
+                placeholder="staff@aura.store"
               />
             </div>
             <div>

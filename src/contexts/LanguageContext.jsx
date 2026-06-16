@@ -4,7 +4,7 @@ const LanguageContext = createContext();
 
 export function LanguageProvider({ children }) {
   const [lang, setLang] = useState(() => {
-    return localStorage.getItem('miniyo-lang') || 'en';
+    return localStorage.getItem('aura-lang') || 'en';
   });
 
   const isRTL = lang === 'ar';
@@ -13,7 +13,7 @@ export function LanguageProvider({ children }) {
     const html = document.documentElement;
     html.setAttribute('dir', isRTL ? 'rtl' : 'ltr');
     html.setAttribute('lang', lang);
-    localStorage.setItem('miniyo-lang', lang);
+    localStorage.setItem('aura-lang', lang);
   }, [lang, isRTL]);
 
   const toggleLang = () => setLang(prev => (prev === 'en' ? 'ar' : 'en'));

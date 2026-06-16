@@ -5,7 +5,7 @@ import { useLang } from '@/contexts/LanguageContext';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { base44 } from '@/api/base44Client';
 import { useNavigate, Link } from 'react-router-dom';
-import { ShoppingBag, CheckCircle2, Tag, X, Loader2, Gift } from 'lucide-react';
+import { CheckCircle2, Tag, X, Loader2, Gift } from 'lucide-react';
 import { validatePromoCode, calcPromoDiscount } from '@/lib/discounts';
 import { useQuery } from '@tanstack/react-query';
 
@@ -16,10 +16,10 @@ const ScrollToTop = ({ trigger }) => {
   return null;
 };
 
-const CITIES = ['Tripoli', 'Beirut', 'Jounieh', 'Sidon', 'Tyre', 'Zahle', 'Batroun', 'Jbail', 'Tripoli North', 'Other'];
+const CITIES = ['Beirut', 'Mount Lebanon', 'Tripoli', 'Jounieh', 'Sidon', 'Tyre', 'Zahle', 'Batroun', 'Jbeil', 'Other'];
 
 function genOrderNum() {
-  return 'MNY-' + String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
+  return 'AURA-' + String(Math.floor(Math.random() * 99999) + 1).padStart(5, '0');
 }
 
 export default function CheckoutPage() {
@@ -29,7 +29,6 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const siteSettings = useSiteSettings();
 
-  // Fetch customer tier and settings
   const { data: customers = [] } = useQuery({
     queryKey: ['customers-for-checkout', currentUser?.email],
     queryFn: () => currentUser?.email
@@ -65,7 +64,6 @@ export default function CheckoutPage() {
       }[customer.current_tier || 'Bronze']
     : 0;
 
-  // Build the list of enabled payment methods from site settings
   const enabledMethods = [
     siteSettings.paymentCodEnabled && { key: 'Cash on Delivery', label: t('Cash on Delivery', 'الدفع عند الاستلام') },
     siteSettings.paymentWhishEnabled && { key: 'Whish', label: 'Whish' },
@@ -91,7 +89,6 @@ export default function CheckoutPage() {
   const [emailError, setEmailError] = useState('');
   const [addressChanged, setAddressChanged] = useState(false);
 
-  // Gift options
   const [gift, setGift] = useState({
     is_gift: false,
     gift_wrapping: false,
@@ -103,10 +100,8 @@ export default function CheckoutPage() {
     setGift(g => ({ ...g, [k]: v }));
   }
 
-  // Auto-fill address from customer's first saved address (if exists and logged in)
   useEffect(() => {
     if (currentUser?.id && customer && !addressChanged) {
-      // Try to load a saved address from CustomerAddress entity
       const tryLoadAddress = async () => {
         try {
           const addresses = await base44.entities.CustomerAddress?.filter?.({ customer_id: customer.id }, 'created_date', 1);
@@ -130,7 +125,6 @@ export default function CheckoutPage() {
     }
   }, [currentUser?.id, customer?.id]);
 
-  // When site settings load, set default to first enabled method if current is disabled
   useEffect(() => {
     if (enabledMethods.length && !enabledMethods.find(m => m.key === form.payment_method)) {
       setF('payment_method', enabledMethods[0].key);
@@ -139,17 +133,15 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(null);
   const [promoInput, setPromoInput] = useState('');
-  const [promoCode, setPromoCode] = useState(null); // validated code record
+  const [promoCode, setPromoCode] = useState(null);
   const [promoError, setPromoError] = useState('');
   const [promoLoading, setPromoLoading] = useState(false);
   const [phoneError, setPhoneError] = useState('');
   const [stockError, setStockError] = useState('');
 
-  // Calculate promo discount FIRST (before using it in postDiscountSubtotal)
   const isFreeShipping = promoCode?.type === 'free_shipping';
   const promoDiscount = promoCode && items?.length > 0 ? (calcPromoDiscount(promoCode, items, subtotal) ?? 0) : 0;
 
-  // Determine post-discount subtotal for threshold check
   let postDiscountSubtotal = Number(subtotal || 0);
   if (memberDiscount > 0 && promoDiscount > 0) {
     if (promoCode?.stackable_with_membership) {
@@ -167,13 +159,11 @@ export default function CheckoutPage() {
   const freeShippingThreshold = Number(siteSettings.freeShippingThreshold || 50);
   const qualifiesForThreshold = postDiscountSubtotal >= freeShippingThreshold;
 
-  // Get shipping zone and fee with fallback
   const selectedZone = form.shipping_zone_id ? shippingZones.find(z => z.id === form.shipping_zone_id) : null;
   const catchallZone = shippingZones.find(z => z.is_catchall);
   const zoneForFee = selectedZone || catchallZone || { fee_usd: 6 };
   const deliveryFee = Number(zoneForFee?.fee_usd || 6);
 
-  // Apply member discount logic
   let effectivePromoDiscount = Number(promoDiscount || 0);
   let effectiveMemberDiscount = 0;
 
@@ -223,18 +213,14 @@ export default function CheckoutPage() {
   }
 
   function validateLebanesePhone(phone) {
-    // Lebanese formats. Mobile prefixes: 03, 70, 71, 76, 78, 79, 81; landline 01-09.
-    // Accepts +961 / 00961 / 961 / leading 0, with or without spaces/dashes, e.g.
-    // 03 123 456, 70123456, +961 3 123456, 01 234 567.
     let c = String(phone || '').replace(/[\s\-()]/g, '');
     c = c.replace(/^\+961/, '').replace(/^00961/, '').replace(/^961/, '').replace(/^0/, '');
-    const mobile = /^(3\d{6}|7[0-9]\d{6}|8[01]\d{6})$/; // 7-8 digit mobiles
-    const landline = /^[1-9]\d{6}$/;                     // 7-digit landline
+    const mobile = /^(3\d{6}|7[0-9]\d{6}|8[01]\d{6})$/;
+    const landline = /^[1-9]\d{6}$/;
     return mobile.test(c) || landline.test(c);
   }
 
   async function revalidateStock() {
-    // Check live stock for all items
     const issues = [];
     for (const item of items) {
       try {
@@ -242,7 +228,6 @@ export default function CheckoutPage() {
         if (!currentProduct) {
           issues.push(`${item.product.name} is no longer available`);
         } else if (currentProduct.has_variants) {
-          // Check variant stock
           const variant = await base44.entities.ProductVariant?.filter?.(
             { product_id: item.product.id, size: item.variant?.size, color: item.variant?.color },
             'id',
@@ -268,7 +253,6 @@ export default function CheckoutPage() {
     setStockError('');
     setSubmitting(true);
 
-    // Validate email
     if (!form.customer_email || !form.customer_email.trim()) {
       setEmailError(t('Email is required', 'البريد الإلكتروني مطلوب'));
       setSubmitting(false);
@@ -281,7 +265,6 @@ export default function CheckoutPage() {
       return;
     }
 
-    // Validate Lebanese phone
     if (!form.customer_phone || !form.customer_phone.trim()) {
       setPhoneError(t('Phone is required for COD delivery', 'الهاتف مطلوب للتوصيل عند الاستلام'));
       setSubmitting(false);
@@ -294,7 +277,6 @@ export default function CheckoutPage() {
       return;
     }
 
-    // Re-validate stock
     const stockIssues = await revalidateStock();
     if (stockIssues.length > 0) {
       setStockError(stockIssues.join('; '));
@@ -304,7 +286,6 @@ export default function CheckoutPage() {
     }
 
     try {
-      // Create guest account if opted in
       let guestCustomerId = currentUser?.id || '';
       if (!currentUser && createAccount) {
         try {
@@ -325,13 +306,11 @@ export default function CheckoutPage() {
             });
             guestCustomerId = newCustomer.id;
 
-            // Grant Bronze credits
             await base44.functions.invoke('membershipEngine', {
               action: 'grant_bronze_credits',
               customer_id: newCustomer.id
             });
 
-            // Send welcome email
             try {
               await base44.functions.invoke('sendWelcomeEmailNew', {
                 customer_id: newCustomer.id,
@@ -377,7 +356,6 @@ export default function CheckoutPage() {
         gift_message: gift.is_gift ? gift.gift_message.slice(0, GIFT_MSG_MAX) : '',
       });
 
-      // Handle free delivery credit consumption (if under $50 and member wants it)
       if (customer && customer.free_delivery_credits_remaining > 0 && effectiveDelivery > 0 && subtotal < 50) {
         try {
           await base44.functions.invoke('membershipEngine', {
@@ -389,7 +367,6 @@ export default function CheckoutPage() {
         }
       }
 
-      // Update customer lifetime spend and check tier upgrades
       if (customer) {
         const newSpend = (customer.lifetime_spend_usd || 0) + grandTotal;
         await base44.entities.Customer.update(customer.id, {
@@ -398,7 +375,6 @@ export default function CheckoutPage() {
           total_spent_usd: (customer.total_spent_usd || 0) + grandTotal
         });
 
-        // Check for tier upgrades
         try {
           await base44.functions.invoke('membershipEngine', {
             action: 'check_tier_upgrade',
@@ -408,12 +384,10 @@ export default function CheckoutPage() {
           console.error('Tier upgrade check failed:', e);
         }
       }
-      // Increment promo code usage
       if (promoCode) {
         await base44.entities.PromoCode.update(promoCode.id, { times_used: (promoCode.times_used || 0) + 1 });
       }
 
-      // Save preferred payment method for logged-in customers
       if (currentUser?.id) {
         try {
           await base44.auth.updateMe({ preferred_payment: form.payment_method });
@@ -434,7 +408,6 @@ export default function CheckoutPage() {
         })
       ));
 
-      // Fire confirmation (customer) + notification (admin) emails. Best effort.
       try {
         await base44.functions.invoke('sendOrderConfirmation', { order_id: order.id });
       } catch (e) {
@@ -460,17 +433,13 @@ export default function CheckoutPage() {
       <>
         <ScrollToTop trigger={success} />
         <div className="min-h-[70vh] flex flex-col items-center justify-center gap-4 px-4 text-center">
-          <CheckCircle2 className="w-14 h-14 text-green-500 animate-in zoom-in duration-500" />
-          <h2 className="text-2xl font-heading font-bold text-foreground">{t('Order Placed!', 'تم تقديم طلبك!')}</h2>
-          <p className="text-muted-foreground">{t('Your order number is', 'رقم طلبك هو')} <strong className="text-primary text-lg">{success}</strong></p>
-          <p className="text-sm text-muted-foreground">{t('We\'ll deliver Cash on Delivery. Track your order below.', 'سيتم التوصيل بالدفع عند الاستلام.')}</p>
-          <div className="flex gap-3">
-            <button onClick={() => navigate('/track')} className="px-5 py-2.5 border border-border rounded-full text-sm font-medium hover:bg-muted">
-              {t('Track Order', 'تتبع الطلب')}
-            </button>
-            <button onClick={() => navigate('/shop')} className="px-5 py-2.5 bg-primary text-primary-foreground rounded-full text-sm font-semibold">
-              {t('Continue Shopping', 'تابع التسوق')}
-            </button>
+          <CheckCircle2 className="w-14 h-14 text-success animate-in zoom-in duration-500" />
+          <h2 className="font-display font-bold uppercase text-2xl tracking-tight">{t('Order placed', 'تم تقديم طلبك')}</h2>
+          <p className="text-muted-foreground">{t('Your order number is', 'رقم طلبك هو')} <strong className="text-foreground text-lg font-display">{success}</strong></p>
+          <p className="text-sm text-muted-foreground max-w-sm">{t('We’ll be in touch to confirm delivery. Track your order any time.', 'سنتواصل معك لتأكيد التوصيل. تتبّع طلبك في أي وقت.')}</p>
+          <div className="flex gap-3 mt-2">
+            <button onClick={() => navigate('/track')} className="btn-outline h-11 px-5">{t('Track order', 'تتبع الطلب')}</button>
+            <button onClick={() => navigate('/shop')} className="btn-primary h-11 px-5">{t('Continue shopping', 'تابع التسوق')}</button>
           </div>
         </div>
       </>
@@ -482,23 +451,20 @@ export default function CheckoutPage() {
     return null;
   }
 
+  const inputCls = 'w-full px-3 h-11 rounded-sm border border-border bg-background text-sm outline-none focus:border-foreground transition-colors';
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Signed-in indicator with membership */}
       {currentUser && (
-        <div className="bg-primary/5 border-b border-border px-4 py-4 sticky top-0 z-10">
-          <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
+        <div className="bg-secondary border-b border-border px-4 py-3">
+          <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 flex-wrap text-sm">
               <span className="text-xs text-muted-foreground">{t('Signed in as', 'تم تسجيل الدخول باسم')}</span>
-              <span className="font-semibold text-foreground">{currentUser.full_name || currentUser.email}</span>
+              <span className="font-display uppercase text-sm">{currentUser.full_name || currentUser.email}</span>
               {customer && (
                 <>
                   <span className="text-xs text-muted-foreground">•</span>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                    customer.current_tier === 'Gold' ? 'bg-yellow-100 text-yellow-800' :
-                    customer.current_tier === 'Silver' ? 'bg-slate-100 text-slate-800' :
-                    'bg-orange-100 text-orange-800'
-                  }`}>
+                  <span className="text-xs font-display uppercase tracking-wide bg-charcoal text-white px-2 py-0.5 rounded-sm">
                     {customer.current_tier} {t('Member', 'العضو')}
                   </span>
                   <span className="text-xs text-muted-foreground">
@@ -508,71 +474,54 @@ export default function CheckoutPage() {
                 </>
               )}
             </div>
-            <Link to="/account" className="text-xs text-primary hover:underline">{t('Edit Profile', 'تعديل الملف الشخصي')}</Link>
+            <Link to="/account" className="text-xs text-foreground hover:underline shrink-0">{t('Edit profile', 'تعديل الملف')}</Link>
           </div>
         </div>
       )}
 
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-heading font-bold text-foreground mb-6">{t('Checkout', 'إتمام الطلب')}</h1>
-        <div className="grid md:grid-cols-[1fr_320px] gap-6">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+        <h1 className="font-display font-bold uppercase text-2xl sm:text-3xl tracking-tight mb-6">{t('Checkout', 'إتمام الطلب')}</h1>
+        <div className="grid md:grid-cols-[1fr_340px] gap-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             {stockError && (
-              <div className="bg-destructive/10 border border-destructive/30 rounded-2xl p-4 flex gap-3">
-                <div className="text-destructive text-sm">{stockError}</div>
-              </div>
+              <div className="bg-sale/10 border border-sale/30 rounded-sm p-4 text-sale text-sm">{stockError}</div>
             )}
 
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
-              <h2 className="font-semibold text-foreground text-sm">{t('Contact Info', 'معلومات التواصل')}</h2>
+            <div className="border border-border rounded-sm p-5 space-y-3">
+              <h2 className="font-display uppercase tracking-wide text-sm">{t('Contact', 'التواصل')}</h2>
               {[
                 { k: 'customer_name', label: t('Full Name *', 'الاسم الكامل *'), required: true },
                 { k: 'customer_phone', label: t('Phone *', 'الهاتف *'), required: true, type: 'tel' },
-                { k: 'customer_email', label: t('Email Address *', 'عنوان البريد الإلكتروني *'), required: true, type: 'email', readOnly: !!currentUser },
+                { k: 'customer_email', label: t('Email *', 'البريد الإلكتروني *'), required: true, type: 'email', readOnly: !!currentUser },
               ].map(({ k, label, required, type, readOnly }) => (
                 <div key={k}>
                   <label className="text-xs text-muted-foreground block mb-1">{label}</label>
-                  <input 
+                  <input
                     required={required}
                     type={type || 'text'}
                     readOnly={readOnly}
                     value={form[k]}
                     onChange={e => { setF(k, e.target.value); if (k === 'customer_phone') setPhoneError(''); }}
-                    className={`w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm ${readOnly ? 'bg-muted text-muted-foreground cursor-not-allowed' : ''}`}
+                    className={`${inputCls} ${readOnly ? 'bg-secondary text-muted-foreground cursor-not-allowed' : ''}`}
                   />
-                  {k === 'customer_email' && emailError && (
-                    <p className="text-xs text-destructive mt-1">{emailError}</p>
-                  )}
-                  {k === 'customer_phone' && phoneError && (
-                    <p className="text-xs text-destructive mt-1">{phoneError}</p>
-                  )}
+                  {k === 'customer_email' && emailError && <p className="text-xs text-sale mt-1">{emailError}</p>}
+                  {k === 'customer_phone' && phoneError && <p className="text-xs text-sale mt-1">{phoneError}</p>}
                 </div>
               ))}
 
-              {/* Guest account creation option */}
               {!currentUser && (
-                <div className="border-t border-border pt-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={createAccount}
-                      onChange={(e) => setCreateAccount(e.target.checked)}
-                      className="rounded"
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      {t('Create an account to track my orders', 'إنشاء حساب لتتبع طلباتي')}
-                    </span>
-                  </label>
-                </div>
+                <label className="flex items-center gap-2 cursor-pointer border-t border-border pt-3">
+                  <input type="checkbox" checked={createAccount} onChange={(e) => setCreateAccount(e.target.checked)} className="rounded-sm" />
+                  <span className="text-xs text-muted-foreground">{t('Create an account to track my orders', 'إنشاء حساب لتتبع طلباتي')}</span>
+                </label>
               )}
             </div>
 
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
-              <h2 className="font-semibold text-foreground text-sm">{t('Delivery Address', 'عنوان التوصيل')}</h2>
+            <div className="border border-border rounded-sm p-5 space-y-3">
+              <h2 className="font-display uppercase tracking-wide text-sm">{t('Delivery', 'التوصيل')}</h2>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">{t('Shipping Zone *', 'منطقة الشحن *')}</label>
-                <select required value={form.shipping_zone_id} onChange={e => setF('shipping_zone_id', e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm">
+                <select required value={form.shipping_zone_id} onChange={e => setF('shipping_zone_id', e.target.value)} className={inputCls}>
                   <option value="">-- {t('Select a zone', 'اختر منطقة')} --</option>
                   {shippingZones.map(z => (
                     <option key={z.id} value={z.id}>
@@ -583,17 +532,15 @@ export default function CheckoutPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t('City', 'المدينة')}</label>
-                  <select value={form.city} onChange={e => setF('city', e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm">
+                  <label className="text-xs text-muted-foreground block mb-1">{t('Governorate', 'المحافظة')}</label>
+                  <select value={form.city} onChange={e => setF('city', e.target.value)} className={inputCls}>
                     <option value="">--</option>
                     {CITIES.map(c => <option key={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1">{t('District', 'المنطقة')}</label>
-                  <input value={form.district} onChange={e => setF('district', e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm" placeholder={t('Optional', 'اختياري')} />
+                  <input value={form.district} onChange={e => setF('district', e.target.value)} className={inputCls} placeholder={t('Optional', 'اختياري')} />
                 </div>
               </div>
               {[
@@ -604,19 +551,16 @@ export default function CheckoutPage() {
               ].map(({ k, label }) => (
                 <div key={k}>
                   <label className="text-xs text-muted-foreground block mb-1">{label}</label>
-                  <input value={form[k]} onChange={e => setF(k, e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm" />
+                  <input value={form[k]} onChange={e => setF(k, e.target.value)} className={inputCls} />
                 </div>
               ))}
             </div>
 
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
+            <div className="border border-border rounded-sm p-5 space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-foreground text-sm">{t('Payment', 'الدفع')}</h2>
+                <h2 className="font-display uppercase tracking-wide text-sm">{t('Payment', 'الدفع')}</h2>
                 {currentUser?.preferred_payment && form.payment_method === currentUser.preferred_payment && (
-                  <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                    {t('Saved preference', 'طريقة محفوظة')}
-                  </span>
+                  <span className="text-xs text-muted-foreground">{t('Saved preference', 'محفوظة')}</span>
                 )}
               </div>
               {enabledMethods.length === 0 ? (
@@ -625,8 +569,8 @@ export default function CheckoutPage() {
                 <div className="flex gap-3 flex-wrap">
                   {enabledMethods.map(m => (
                     <button type="button" key={m.key} onClick={() => setF('payment_method', m.key)}
-                      className={`flex-1 py-2.5 rounded-xl border text-sm font-medium transition-colors min-w-[120px]
-                        ${form.payment_method === m.key ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted'}`}>
+                      className={`flex-1 h-11 rounded-sm border text-sm font-display transition-colors min-w-[120px]
+                        ${form.payment_method === m.key ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:border-foreground'}`}>
                       {m.label}
                     </button>
                   ))}
@@ -634,147 +578,120 @@ export default function CheckoutPage() {
               )}
             </div>
 
-            {/* Gift options */}
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
+            <div className="border border-border rounded-sm p-5 space-y-3">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={gift.is_gift}
-                  onChange={e => setGiftField('is_gift', e.target.checked)}
-                  className="rounded"
-                />
-                <span className="font-semibold text-foreground text-sm flex items-center gap-1.5">
-                  <Gift className="w-4 h-4 text-primary" /> {t('This is a gift', 'هذا هدية')}
+                <input type="checkbox" checked={gift.is_gift} onChange={e => setGiftField('is_gift', e.target.checked)} className="rounded-sm" />
+                <span className="font-display uppercase tracking-wide text-sm flex items-center gap-1.5">
+                  <Gift className="w-4 h-4" /> {t('This is a gift', 'هذا هدية')}
                 </span>
               </label>
 
               {gift.is_gift && (
-                <div className="space-y-3 pl-1 border-l-2 border-primary/20 ml-1">
-                  <div className="pl-3 space-y-3">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={gift.gift_wrapping}
-                        onChange={e => setGiftField('gift_wrapping', e.target.checked)}
-                        className="rounded"
-                      />
-                      <span className="text-sm text-foreground">{t('Add gift wrapping', 'أضف تغليف الهدية')}</span>
-                    </label>
-
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={gift.hide_invoice_price}
-                        onChange={e => setGiftField('hide_invoice_price', e.target.checked)}
-                        className="rounded"
-                      />
-                      <span className="text-sm text-foreground">{t('Hide prices on the packing slip / invoice', 'إخفاء الأسعار في إيصال الطلب')}</span>
-                    </label>
-
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1">{t('Gift message (optional)', 'رسالة الهدية (اختياري)')}</label>
-                      <textarea
-                        value={gift.gift_message}
-                        maxLength={GIFT_MSG_MAX}
-                        onChange={e => setGiftField('gift_message', e.target.value.slice(0, GIFT_MSG_MAX))}
-                        rows={3}
-                        placeholder={t('Write a personal note to the recipient…', 'اكتب رسالة شخصية للمستلم…')}
-                        className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1 text-right">
-                        {gift.gift_message.length}/{GIFT_MSG_MAX}
-                      </p>
-                    </div>
+                <div className="space-y-3 border-l-2 border-border ml-1 pl-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={gift.gift_wrapping} onChange={e => setGiftField('gift_wrapping', e.target.checked)} className="rounded-sm" />
+                    <span className="text-sm">{t('Add gift wrapping', 'أضف تغليف الهدية')}</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={gift.hide_invoice_price} onChange={e => setGiftField('hide_invoice_price', e.target.checked)} className="rounded-sm" />
+                    <span className="text-sm">{t('Hide prices on the packing slip', 'إخفاء الأسعار في الإيصال')}</span>
+                  </label>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1">{t('Gift message (optional)', 'رسالة الهدية (اختياري)')}</label>
+                    <textarea
+                      value={gift.gift_message}
+                      maxLength={GIFT_MSG_MAX}
+                      onChange={e => setGiftField('gift_message', e.target.value.slice(0, GIFT_MSG_MAX))}
+                      rows={3}
+                      placeholder={t('Write a personal note to the recipient…', 'اكتب رسالة شخصية للمستلم…')}
+                      className="w-full px-3 py-2.5 rounded-sm border border-border bg-background text-sm resize-none outline-none focus:border-foreground"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1 text-right">{gift.gift_message.length}/{GIFT_MSG_MAX}</p>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="bg-card border border-border rounded-2xl p-5">
+            <div className="border border-border rounded-sm p-5">
               <label className="text-xs text-muted-foreground block mb-1">{t('Order Notes (optional)', 'ملاحظات الطلب (اختياري)')}</label>
               <textarea value={form.notes} onChange={e => setF('notes', e.target.value)} rows={2}
-                className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm resize-none" />
+                className="w-full px-3 py-2.5 rounded-sm border border-border bg-background text-sm resize-none outline-none focus:border-foreground" />
             </div>
 
             <button type="submit" disabled={submitting}
-              className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-primary/90 transition-colors shadow-sm">
-              {submitting ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <ShoppingBag className="w-4 h-4" />}
-              {t('Place Order', 'تأكيد الطلب')} · ${grandTotal.toFixed(2)}
+              className="btn-primary w-full h-13 flex items-center justify-center gap-2 disabled:opacity-50">
+              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {t('Place order', 'تأكيد الطلب')} · ${grandTotal.toFixed(2)}
             </button>
           </form>
 
           {/* Order summary */}
-          <div className="space-y-3">
-            <div className="bg-card border border-border rounded-2xl p-5 space-y-3 sticky top-24">
-              <h2 className="font-semibold text-foreground text-sm">{t('Order Summary', 'ملخص الطلب')}</h2>
+          <div>
+            <div className="border border-border rounded-sm p-5 space-y-3 sticky top-24">
+              <h2 className="font-display uppercase tracking-wide text-sm">{t('Order Summary', 'ملخص الطلب')}</h2>
               {items.map((item, i) => {
                 const name = lang === 'ar' ? (item.product.name_ar || item.product.name) : item.product.name;
                 return (
                   <div key={i} className="flex justify-between text-sm gap-2">
                     <span className="text-muted-foreground line-clamp-1 flex-1">{name} ×{item.quantity}</span>
-                    <span className="font-semibold shrink-0">${(item.product.price_usd * item.quantity).toFixed(2)}</span>
+                    <span className="font-display font-semibold shrink-0 tabular-nums">${(item.product.price_usd * item.quantity).toFixed(2)}</span>
                   </div>
                 );
               })}
-              {/* Promo code input */}
+
               <div className="pt-2 border-t border-border">
                 {promoCode ? (
-                  <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2">
-                    <Tag className="w-4 h-4 text-green-700 shrink-0" />
+                  <div className="flex items-center gap-2 bg-success/10 border border-success/30 rounded-sm px-3 py-2">
+                    <Tag className="w-4 h-4 text-success shrink-0" />
                     <div className="flex-1">
-                      <p className="text-xs font-bold text-green-800">{promoCode.code} applied!</p>
-                      <p className="text-xs text-green-700">
+                      <p className="text-xs font-display uppercase text-success">{promoCode.code} {t('applied', 'مُطبّق')}</p>
+                      <p className="text-xs text-success">
                         {promoCode.type === 'free_shipping' ? t('Free shipping', 'شحن مجاني') : `-$${promoDiscount.toFixed(2)}`}
                       </p>
                     </div>
-                    <button onClick={removePromo} className="text-green-700 hover:text-green-900"><X className="w-4 h-4" /></button>
+                    <button onClick={removePromo} className="text-success"><X className="w-4 h-4" /></button>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
                     <label className="text-xs text-muted-foreground">{t('Promo Code', 'رمز ترويجي')}</label>
                     <div className="flex gap-2">
                       <input value={promoInput} onChange={e => setPromoInput(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && handleApplyPromo()}
+                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleApplyPromo())}
                         placeholder={t('Enter code', 'أدخل الرمز')}
-                        className="flex-1 px-3 py-2 rounded-xl border border-input bg-background text-sm" />
-                      <button onClick={handleApplyPromo} disabled={!promoInput.trim() || promoLoading}
-                        className="px-3 py-2 bg-primary text-primary-foreground rounded-xl text-xs font-semibold disabled:opacity-50 flex items-center gap-1">
+                        className="flex-1 px-3 h-10 rounded-sm border border-border bg-background text-sm outline-none focus:border-foreground" />
+                      <button type="button" onClick={handleApplyPromo} disabled={!promoInput.trim() || promoLoading}
+                        className="px-4 h-10 bg-primary text-primary-foreground rounded-sm text-xs font-display uppercase disabled:opacity-50 flex items-center gap-1">
                         {promoLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : t('Apply', 'تطبيق')}
                       </button>
                     </div>
-                    {promoError && <p className="text-xs text-destructive">{promoError}</p>}
+                    {promoError && <p className="text-xs text-sale">{promoError}</p>}
                   </div>
                 )}
               </div>
 
-              <div className="border-t border-border pt-2 space-y-1.5 text-sm">
-                <div className="flex justify-between text-muted-foreground"><span>{t('Subtotal', 'المجموع الفرعي')}</span><span>${subtotal.toFixed(2)}</span></div>
+              <div className="border-t border-border pt-3 space-y-1.5 text-sm">
+                <div className="flex justify-between text-muted-foreground"><span>{t('Subtotal', 'المجموع الفرعي')}</span><span className="tabular-nums">${subtotal.toFixed(2)}</span></div>
 
-                {/* Show member tier and discount */}
                 {customer && memberDiscount > 0 && (
                   <div className="flex justify-between items-center">
-                    <span className="text-primary flex items-center gap-1 font-medium">
-                      <Gift className="w-3 h-3" /> {customer.current_tier} {t('Member Discount', 'خصم العضو')} ({memberDiscount}%)
-                    </span>
-                    <span className="text-primary font-bold">-${effectiveMemberDiscount.toFixed(2)}</span>
+                    <span className="flex items-center gap-1"><Gift className="w-3 h-3" /> {customer.current_tier} ({memberDiscount}%)</span>
+                    <span className="font-display font-semibold tabular-nums">-${effectiveMemberDiscount.toFixed(2)}</span>
                   </div>
                 )}
 
-                {/* Show promo code discount */}
                 {effectivePromoDiscount > 0 && (
-                  <div className="flex justify-between text-green-700 font-medium">
-                    <span>{t('Promo Code', 'رمز ترويجي')} ({promoCode?.code})</span>
-                    <span>-${effectivePromoDiscount.toFixed(2)}</span>
+                  <div className="flex justify-between text-success">
+                    <span>{t('Promo', 'رمز')} ({promoCode?.code})</span>
+                    <span className="tabular-nums">-${effectivePromoDiscount.toFixed(2)}</span>
                   </div>
                 )}
 
-                {/* Delivery with free shipping reason */}
                 <div className="flex justify-between text-muted-foreground">
                   <span>{t('Delivery', 'التوصيل')}</span>
-                  <span className="flex items-center gap-1">
+                  <span className="tabular-nums">
                     {effectiveDelivery === 0 ? (
-                      <span className="text-green-700 font-medium">
-                        {isFreeShipping ? `${t('Free shipping', 'شحن مجاني')} (${t('promo', 'رمز')})` : `${t('Free', 'مجاني')} (${t('order over', 'طلب فوق')} $${freeShippingThreshold.toFixed(2)})`}
+                      <span className="text-success">
+                        {isFreeShipping ? `${t('Free', 'مجاني')} (${t('promo', 'رمز')})` : t('Free', 'مجاني')}
                       </span>
                     ) : (
                       `$${effectiveDelivery.toFixed(2)}`
@@ -782,27 +699,21 @@ export default function CheckoutPage() {
                   </span>
                 </div>
 
-                {/* Free shipping progress (if not yet qualified and no promo) */}
                 {!qualifiesForThreshold && !isFreeShipping && (
-                  <div className="pt-2 border-t border-border">
+                  <div className="pt-2">
                     <div className="flex justify-between items-center mb-1.5">
-                      <span className="text-xs text-muted-foreground">{t('Free shipping threshold', 'حد الشحن المجاني')}</span>
-                      <span className="text-xs font-semibold text-primary">
-                        ${(freeShippingThreshold - postDiscountSubtotal).toFixed(2)} {t('more', 'أكثر')}
-                      </span>
+                      <span className="text-xs text-muted-foreground">{t('Free shipping at', 'شحن مجاني عند')} ${freeShippingThreshold.toFixed(0)}</span>
+                      <span className="text-xs font-display">${(freeShippingThreshold - postDiscountSubtotal).toFixed(2)} {t('away', 'متبقي')}</span>
                     </div>
-                    <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary transition-all duration-300"
-                        style={{ width: `${Math.min((postDiscountSubtotal / freeShippingThreshold) * 100, 100)}%` }}
-                      />
+                    <div className="w-full h-1.5 bg-secondary rounded-sm overflow-hidden">
+                      <div className="h-full bg-primary transition-all duration-300" style={{ width: `${Math.min((postDiscountSubtotal / freeShippingThreshold) * 100, 100)}%` }} />
                     </div>
                   </div>
                 )}
 
-                <div className="flex justify-between font-bold text-foreground text-base">
+                <div className="flex justify-between font-display font-bold text-base pt-1">
                   <span>{t('Total', 'المجموع')}</span>
-                  <span>${grandTotal.toFixed(2)}</span>
+                  <span className="tabular-nums">${grandTotal.toFixed(2)}</span>
                 </div>
               </div>
             </div>
