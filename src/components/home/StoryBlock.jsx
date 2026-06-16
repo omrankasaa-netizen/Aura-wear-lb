@@ -16,8 +16,8 @@ export default function StoryBlock() {
   });
   const section = sections[0];
 
-  const title  = section ? (lang === 'ar' ? (section.title_ar || section.title) : section.title) : t('Made with love for Lebanon\'s little ones.', 'صُنع بحب لصغار لبنان.');
-  const body   = section ? (lang === 'ar' ? (section.body_ar  || section.body)  : section.body)  : t('Soft fabrics, honest prices, delivered to your door. MiniYo is built for the parents of Lebanon — because your little ones deserve the best.', 'أقمشة ناعمة، أسعار صادقة، وتوصيل إلى بابك. ميني يو مبني لأهالي لبنان — لأن صغاركم يستاهلون الأفضل.');
+  const title  = section ? (lang === 'ar' ? (section.title_ar || section.title) : section.title) : t('Built for the everyday fit.', 'مصمّمة للإطلالة اليومية.');
+  const body   = section ? (lang === 'ar' ? (section.body_ar  || section.body)  : section.body)  : t('Premium menswear, honest prices, delivered across Lebanon. AURA is built for men who want to level up their everyday fit.', 'ملابس رجالية فاخرة، أسعار صادقة، وتوصيل لكل لبنان. AURA مصمّمة للرجل الذي يريد رفع مستوى إطلالته اليومية.');
   const imgUrl = section?.image_url || null;
 
   return (

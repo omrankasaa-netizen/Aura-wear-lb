@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Poppins:wght@300;400;500;600&family=Cairo:wght@400;500;600;700&family=Tajawal:wght@300;400;500;700&display=swap');
+@import '/fonts/aura-fonts.css';
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Tajawal:wght@300;400;500;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,82 +7,91 @@
 
 @layer base {
   :root {
-    /* MiniYo Brand Palette */
-    --background: 34 33% 96%;        /* #FAF7F2 cream canvas */
-    --foreground: 0 0% 17%;           /* #2B2B2B charcoal */
-    --card: 0 0% 100%;                /* #FFFFFF white surfaces */
-    --card-foreground: 0 0% 17%;
+    /* AURA Brand Palette — light default */
+    --background: 40 33% 97%;         /* #FAF8F4 warm off-white/stone */
+    --foreground: 0 0% 5%;            /* #0E0E0E near-black */
+    --card: 0 0% 100%;               /* #FFFFFF surfaces */
+    --card-foreground: 0 0% 5%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 17%;
-    --primary: 170 33% 27%;           /* #2F5D57 deep sage-teal */
+    --popover-foreground: 0 0% 5%;
+    --primary: 0 0% 7%;              /* #111111 black */
     --primary-foreground: 0 0% 100%;
-    --secondary: 155 22% 55%;         /* #7FA99B soft sage */
-    --secondary-foreground: 0 0% 100%;
-    --muted: 34 25% 93%;              /* slightly darker cream */
-    --muted-foreground: 0 0% 40%;
-    --accent: 4 46% 85%;              /* #E8C7C4 blush */
-    --accent-foreground: 0 0% 17%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 30 15% 88%;
-    --input: 30 15% 88%;
-    --ring: 170 33% 27%;
-    --chart-1: 170 33% 27%;
-    --chart-2: 155 22% 55%;
-    --chart-3: 4 46% 85%;
-    --chart-4: 34 33% 96%;
-    --chart-5: 0 0% 17%;
-    --radius: 1.5rem;
+    --secondary: 36 22% 89%;         /* #E9E3DA warm beige */
+    --secondary-foreground: 0 0% 7%;
+    --muted: 36 22% 92%;             /* light beige surface */
+    --muted-foreground: 48 3% 41%;   /* #6B6A66 secondary text */
+    --accent: 36 22% 89%;            /* beige */
+    --accent-foreground: 0 0% 7%;
+    --destructive: 6 59% 44%;        /* #B23A2E controlled brick-red */
+    --destructive-foreground: 0 0% 100%;
+    --border: 38 16% 81%;            /* #D8D2C7 stone */
+    --input: 38 16% 81%;
+    --ring: 0 0% 7%;
+    --chart-1: 0 0% 7%;
+    --chart-2: 70 14% 32%;
+    --chart-3: 211 30% 17%;
+    --chart-4: 36 22% 89%;
+    --chart-5: 6 59% 44%;
+    --radius: 0.25rem;
+
+    /* AURA extra tokens */
+    --sale: 6 59% 44%;               /* #B23A2E */
+    --success: 140 30% 33%;          /* #3B6E4D */
+    --accent-olive: 70 14% 32%;      /* #5A5E45 */
+    --accent-navy: 211 30% 17%;      /* #1F2A37 */
+    --charcoal: 240 5% 16%;          /* #26262A */
+    --stone: 38 16% 81%;             /* #D8D2C7 */
 
     /* Font tokens */
-    --font-heading: 'Quicksand', ui-sans-serif, system-ui, sans-serif;
-    --font-body: 'Poppins', ui-sans-serif, system-ui, sans-serif;
-    --font-display: 'Quicksand', ui-sans-serif, system-ui, sans-serif;
+    --font-heading: 'Clash Display', ui-sans-serif, system-ui, sans-serif;
+    --font-body: 'Satoshi', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Clash Display', ui-sans-serif, system-ui, sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-    --sidebar-background: 34 33% 96%;
-    --sidebar-foreground: 0 0% 17%;
-    --sidebar-primary: 170 33% 27%;
+    --sidebar-background: 40 33% 97%;
+    --sidebar-foreground: 0 0% 5%;
+    --sidebar-primary: 0 0% 7%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 4 46% 85%;
-    --sidebar-accent-foreground: 0 0% 17%;
-    --sidebar-border: 30 15% 88%;
-    --sidebar-ring: 170 33% 27%;
+    --sidebar-accent: 36 22% 89%;
+    --sidebar-accent-foreground: 0 0% 7%;
+    --sidebar-border: 38 16% 81%;
+    --sidebar-ring: 0 0% 7%;
   }
 
   .dark {
-    --background: 170 20% 8%;
-    --foreground: 34 33% 96%;
-    --card: 170 15% 12%;
-    --card-foreground: 34 33% 96%;
-    --popover: 170 15% 12%;
-    --popover-foreground: 34 33% 96%;
-    --primary: 155 22% 55%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 170 33% 27%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 170 10% 15%;
-    --muted-foreground: 34 20% 70%;
-    --accent: 4 30% 40%;
-    --accent-foreground: 34 33% 96%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 170 10% 18%;
-    --input: 170 10% 18%;
-    --ring: 155 22% 55%;
-    --chart-1: 155 22% 55%;
-    --chart-2: 170 33% 27%;
-    --chart-3: 4 46% 85%;
-    --chart-4: 34 33% 96%;
-    --chart-5: 0 0% 17%;
-    --sidebar-background: 170 20% 8%;
-    --sidebar-foreground: 34 33% 96%;
-    --sidebar-primary: 155 22% 55%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 170 10% 15%;
-    --sidebar-accent-foreground: 34 33% 96%;
-    --sidebar-border: 170 10% 18%;
-    --sidebar-ring: 155 22% 55%;
+    --background: 0 0% 5%;           /* #0E0E0E */
+    --foreground: 40 20% 95%;        /* #F5F3EF */
+    --card: 240 5% 11%;             /* #1A1A1C */
+    --card-foreground: 40 20% 95%;
+    --popover: 240 5% 11%;
+    --popover-foreground: 40 20% 95%;
+    --primary: 40 20% 95%;           /* inverts to off-white */
+    --primary-foreground: 0 0% 7%;
+    --secondary: 240 5% 16%;
+    --secondary-foreground: 40 20% 95%;
+    --muted: 240 5% 14%;
+    --muted-foreground: 40 8% 65%;
+    --accent: 240 5% 16%;
+    --accent-foreground: 40 20% 95%;
+    --destructive: 6 59% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 5% 18%;
+    --input: 240 5% 18%;
+    --ring: 40 20% 95%;
+    --sale: 6 65% 55%;
+    --success: 140 30% 45%;
+    --accent-olive: 70 14% 45%;
+    --accent-navy: 211 30% 35%;
+    --charcoal: 240 5% 11%;
+    --stone: 240 5% 25%;
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 40 20% 95%;
+    --sidebar-primary: 40 20% 95%;
+    --sidebar-primary-foreground: 0 0% 7%;
+    --sidebar-accent: 240 5% 14%;
+    --sidebar-accent-foreground: 40 20% 95%;
+    --sidebar-border: 240 5% 18%;
+    --sidebar-ring: 40 20% 95%;
   }
 }
 
@@ -101,7 +111,6 @@
   font-family: 'Cairo', ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Arabic body text gets slightly larger line-height for readability */
 [dir="rtl"] p,
 [dir="rtl"] span,
 [dir="rtl"] li,
@@ -120,12 +129,30 @@
     @apply bg-background text-foreground font-body antialiased;
     font-size: 16px;
     line-height: 1.6;
+    font-feature-settings: 'tnum' 1;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-heading;
+    @apply font-display;
+    letter-spacing: -0.01em;
   }
 }
+
+@layer components {
+  .eyebrow {
+    @apply font-display uppercase tracking-[0.18em] text-[11px] sm:text-xs font-medium;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center bg-primary text-primary-foreground font-display uppercase tracking-[0.12em] text-xs font-semibold px-6 h-12 rounded-sm transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center border border-primary text-primary font-display uppercase tracking-[0.12em] text-xs font-semibold px-6 h-12 rounded-sm transition-colors hover:bg-primary hover:text-primary-foreground;
+  }
+}
+
+/* Hide scrollbar utility for horizontal rails */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* Smooth transitions for RTL toggle */
 * {
