@@ -81,7 +81,7 @@ export default function AccountLayout() {
                 );
               })}
               <button onClick={logout}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors mt-2">
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-sm text-sm text-destructive hover:bg-destructive/10 transition-colors mt-2">
                 <LogOut className="w-4 h-4" />
                 {t('Log Out', 'تسجيل الخروج')}
               </button>
