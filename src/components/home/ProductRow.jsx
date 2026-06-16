@@ -1,6 +1,5 @@
 import React, { useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { useLang } from '@/contexts/LanguageContext';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
@@ -43,46 +42,25 @@ export default function ProductRow({ title, titleAr, filter, viewAllLink }) {
   const heading = lang === 'ar' ? titleAr : title;
 
   return (
-    <section className="py-12 sm:py-16 bg-background" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="flex items-center justify-between mb-7"
-        >
-          <h2 className="text-2xl sm:text-3xl font-heading font-bold text-foreground">{heading}</h2>
-          <div className="flex items-center gap-2">
-            <Link to={viewAllLink} className="text-sm text-primary font-medium hover:underline underline-offset-4">
-              {t('View all', 'عرض الكل')}
-            </Link>
+    <section className="py-12 sm:py-16" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
+        <div className="flex items-end justify-between mb-7">
+          <h2 className="font-display font-bold uppercase text-2xl sm:text-3xl tracking-tight">{heading}</h2>
+          <div className="flex items-center gap-3">
+            <Link to={viewAllLink} className="eyebrow text-foreground hover:text-muted-foreground">{t('View all', 'عرض الكل')}</Link>
             <div className="hidden sm:flex gap-1.5">
-              <button onClick={() => scroll(-1)} className="w-8 h-8 rounded-full border border-border flex items-center justify-center hover:bg-muted transition-colors">
-                <ChevronLeft className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
-              <button onClick={() => scroll(1)} className="w-8 h-8 rounded-full border border-border flex items-center justify-center hover:bg-muted transition-colors">
-                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
+              <button onClick={() => scroll(-1)} className="w-9 h-9 border border-border flex items-center justify-center hover:bg-secondary/60 rounded-sm"><ChevronLeft className="w-4 h-4" /></button>
+              <button onClick={() => scroll(1)} className="w-9 h-9 border border-border flex items-center justify-center hover:bg-secondary/60 rounded-sm"><ChevronRight className="w-4 h-4" /></button>
             </div>
           </div>
-        </motion.div>
-
-        {/* Mobile: horizontal scroll | Desktop: 4-up grid */}
-        <div className="hidden lg:grid grid-cols-4 gap-5">
-          {products.slice(0, 8).map((p, i) => (
-            <motion.div key={p.id} initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.06 }}>
-              <ProductCard product={p} />
-            </motion.div>
-          ))}
         </div>
-        <div
-          ref={scrollRef}
-          className="lg:hidden flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        >
+
+        <div className="hidden lg:grid grid-cols-4 gap-5">
+          {products.slice(0, 8).map((p) => <ProductCard key={p.id} product={p} />)}
+        </div>
+        <div ref={scrollRef} className="lg:hidden flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar">
           {products.map(p => (
-            <div key={p.id} className="snap-start shrink-0 w-[220px]">
+            <div key={p.id} className="snap-start shrink-0 w-[44%] sm:w-[30%]">
               <ProductCard product={p} />
             </div>
           ))}

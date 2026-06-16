@@ -55,7 +55,7 @@ export default function AdminLayout({ children }) {
         {/* Logo */}
         <div className="px-5 pt-5 pb-4 border-b border-border flex items-center justify-between">
           <div>
-            <span className="font-heading font-bold text-foreground text-xl tracking-tight">MiniYo</span>
+            <span className="font-display font-bold uppercase text-foreground text-xl tracking-tight">AURA</span>
             <span className="ml-2 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Admin</span>
           </div>
           <button className="lg:hidden p-1 rounded-lg hover:bg-muted" onClick={() => setSidebarOpen(false)}>
@@ -134,7 +134,7 @@ export default function AdminLayout({ children }) {
           </button>
 
           {/* Mobile logo */}
-          <span className="lg:hidden font-heading font-bold text-foreground text-base flex-1">MiniYo</span>
+          <span className="lg:hidden font-display font-bold uppercase text-foreground text-base flex-1">AURA</span>
 
           {/* Desktop spacer */}
           <div className="hidden lg:block flex-1" />

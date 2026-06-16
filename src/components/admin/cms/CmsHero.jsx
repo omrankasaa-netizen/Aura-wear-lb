@@ -65,12 +65,12 @@ export default function CmsHero({ section, mediaAssets, onSave }) {
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Headline (EN)</label>
               <input value={form.title} onChange={e => setF('title', e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm" placeholder="Welcome to MiniYo" />
+                className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm" placeholder="LEVEL UP YOUR AURA" />
             </div>
             <div dir="rtl">
               <label className="text-xs text-muted-foreground block mb-1">العنوان (AR)</label>
               <input value={form.title_ar} onChange={e => setF('title_ar', e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm font-body" placeholder="أهلاً في ميني يو" />
+                className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm font-body" placeholder="ارفع مستوى حضورك" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Subtext (EN)</label>

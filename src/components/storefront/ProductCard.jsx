@@ -1,16 +1,28 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Star } from 'lucide-react';
+import { ShoppingBag, MessageCircle } from 'lucide-react';
 import { useLang } from '@/contexts/LanguageContext';
 import { useCart } from '@/contexts/CartContext';
 import { useDiscounts } from '@/contexts/DiscountContext';
+import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { motion } from 'framer-motion';
 import WishlistHeart from './WishlistHeart';
+import { BRAND, whatsappLink } from '@/lib/brand';
+
+function Badge({ children, tone = 'dark' }) {
+  const tones = {
+    dark: 'bg-primary text-primary-foreground',
+    sale: 'bg-sale text-white',
+    light: 'bg-background text-foreground border border-border',
+  };
+  return <span className={`eyebrow text-[10px] px-2 py-1 ${tones[tone]}`}>{children}</span>;
+}
 
 export default function ProductCard({ product }) {
   const { t, lang } = useLang();
   const { addItem, setIsOpen } = useCart();
   const { getProductDiscount, getDiscountedPrice } = useDiscounts();
+  const settings = useSiteSettings();
   const [added, setAdded] = useState(false);
 
   const name = lang === 'ar' ? (product.name_ar || product.name) : product.name;
@@ -22,7 +34,11 @@ export default function ProductCard({ product }) {
   const hasDiscount = hasCompareDiscount || !!autoDiscount;
   const displayPrice = discountedPrice ?? product.price_usd;
   const originalPrice = discountedPrice ? product.price_usd : (hasCompareDiscount ? product.compare_at_price_usd : null);
-  const badgeLabel = autoDiscount ? (lang === 'ar' ? (autoDiscount.badge_label_ar || autoDiscount.badge_label) : autoDiscount.badge_label) : null;
+  const pctOff = originalPrice && displayPrice ? Math.round((1 - displayPrice / originalPrice) * 100) : null;
+  const fit = product.fit || (product.tags && /oversized|relaxed|slim|regular/i.test(product.tags) ? (product.tags.match(/oversized|relaxed|slim|regular/i) || [])[0] : null);
+
+  const primaryImg = product.primaryImage || product.image_url;
+  const secondImg = product.secondaryImage || product.hoverImage;
 
   function handleAdd(e) {
     e.preventDefault();
@@ -33,46 +49,65 @@ export default function ProductCard({ product }) {
     setTimeout(() => setAdded(false), 1800);
   }
 
+  const waText = t(`Hi AURA, is "${product.name}" available? Sizes/colors?`, `مرحباً AURA، هل "${product.name}" متوفّر؟`);
+
   return (
-    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="group">
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="group">
       <Link to={`/product/${product.slug}`} className="block">
-        <div className="bg-card rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-border/60">
-          <div className="relative aspect-square bg-muted overflow-hidden">
-            {product.primaryImage
-              ? <img src={product.primaryImage} alt={name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-              : <div className="w-full h-full flex items-center justify-center bg-accent/20"><ShoppingBag className="w-12 h-12 text-accent" /></div>}
-            {/* Badges */}
-            <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5">
-              {product.is_new && <span className="bg-primary text-primary-foreground text-xs font-semibold px-2.5 py-1 rounded-full">{t('New', 'جديد')}</span>}
-              {product.is_featured && <span className="bg-accent text-accent-foreground text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1"><Star className="w-2.5 h-2.5 fill-current" /> {t('Featured', 'مميز')}</span>}
-              {badgeLabel && <span className="bg-destructive text-destructive-foreground text-xs font-semibold px-2.5 py-1 rounded-full">{badgeLabel}</span>}
-              {!badgeLabel && hasDiscount && <span className="bg-destructive text-destructive-foreground text-xs font-semibold px-2.5 py-1 rounded-full">{t('Sale', 'تخفيض')}</span>}
-              {isLowStock && <span className="bg-amber-500 text-white text-xs font-semibold px-2.5 py-1 rounded-full">{t('Only', 'فقط')} {product.stock_quantity} {t('left', 'متبقي')}</span>}
-            </div>
-            {/* Wishlist */}
-            <WishlistHeart productId={product.id} className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-white/80 backdrop-blur shadow-sm" />
-            {/* Sold out overlay */}
-            {isOutOfStock && (
-              <div className="absolute inset-0 bg-background/60 flex items-center justify-center backdrop-blur-[1px]">
-                <span className="bg-card text-muted-foreground text-sm font-semibold px-4 py-1.5 rounded-full border border-border">{t('Sold out', 'نفذ المخزون')}</span>
-              </div>
-            )}
-          </div>
-          <div className="p-3.5">
-            <p className="font-heading font-semibold text-foreground text-sm leading-tight line-clamp-2 mb-1.5">{name}</p>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-baseline gap-1.5">
-                <span className={`font-bold ${autoDiscount ? 'text-destructive' : 'text-foreground'}`}>${displayPrice?.toFixed(2)}</span>
-                {originalPrice && <span className="text-xs text-muted-foreground line-through">${originalPrice?.toFixed(2)}</span>}
-              </div>
-              {!isOutOfStock && !product.has_variants && (
-                <button onClick={handleAdd}
-                  className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-sm text-xs font-bold
-                    ${added ? 'bg-green-500 text-white scale-110' : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}>
-                  {added ? '✓' : '+'}
-                </button>
+        <div className="relative aspect-[4/5] bg-secondary overflow-hidden rounded-sm">
+          {primaryImg ? (
+            <>
+              <img src={primaryImg} alt={name}
+                className={`w-full h-full object-cover transition-opacity duration-500 ${secondImg ? 'group-hover:opacity-0' : 'group-hover:scale-105'}`} />
+              {secondImg && (
+                <img src={secondImg} alt="" className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               )}
+            </>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center"><img src="/brand/aura-mark.png" alt="" className="w-10 h-10 opacity-20" /></div>
+          )}
+
+          {/* Badges */}
+          <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
+            {product.is_new && <Badge>{t('New', 'جديد')}</Badge>}
+            {product.is_best_seller && <Badge tone="light">{t('Best Seller', 'الأكثر مبيعاً')}</Badge>}
+            {product.is_limited && <Badge tone="light">{t('Limited', 'محدود')}</Badge>}
+            {hasDiscount && <Badge tone="sale">{pctOff ? `-${pctOff}%` : t('Sale', 'تخفيض')}</Badge>}
+            {isLowStock && <Badge tone="light">{t('Low stock', 'كمية قليلة')}</Badge>}
+          </div>
+
+          {/* Wishlist */}
+          <WishlistHeart productId={product.id} className="absolute top-2 right-2 w-9 h-9 bg-background/90 backdrop-blur rounded-sm" />
+
+          {/* WhatsApp inquiry (desktop hover) */}
+          <a href={whatsappLink(waText, settings.whatsappNumber || BRAND.whatsappNumber)} target="_blank" rel="noopener"
+            onClick={(e) => e.stopPropagation()}
+            className="hidden lg:flex absolute bottom-2 right-2 w-9 h-9 bg-background/90 backdrop-blur rounded-sm items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary hover:text-primary-foreground"
+            aria-label={t('Ask on WhatsApp', 'اسأل عبر واتساب')}>
+            <MessageCircle className="w-4 h-4" strokeWidth={1.5} />
+          </a>
+
+          {/* Quick add (desktop, no-variant only) */}
+          {!isOutOfStock && !product.has_variants && (
+            <button onClick={handleAdd}
+              className={`hidden lg:flex absolute bottom-2 left-2 right-12 h-9 items-center justify-center gap-1.5 text-[11px] uppercase tracking-wide font-display opacity-0 group-hover:opacity-100 transition-all rounded-sm ${added ? 'bg-success text-white' : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}>
+              {added ? t('Added', 'تمت الإضافة') : <><ShoppingBag className="w-3.5 h-3.5" /> {t('Quick add', 'إضافة سريعة')}</>}
+            </button>
+          )}
+
+          {isOutOfStock && (
+            <div className="absolute inset-0 bg-background/55 flex items-center justify-center">
+              <span className="eyebrow bg-background px-3 py-1.5 border border-border">{t('Sold out', 'نفد')}</span>
             </div>
+          )}
+        </div>
+
+        <div className="pt-3">
+          {fit && <p className="eyebrow text-muted-foreground text-[10px] mb-1">{fit}</p>}
+          <p className="text-sm font-medium leading-snug line-clamp-1">{name}</p>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className={`text-sm font-semibold tabular-nums ${hasDiscount ? 'text-sale' : 'text-foreground'}`}>${displayPrice?.toFixed(2)}</span>
+            {originalPrice && <span className="text-xs text-muted-foreground line-through tabular-nums">${originalPrice?.toFixed(2)}</span>}
           </div>
         </div>
       </Link>
