@@ -5,10 +5,12 @@ import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { Instagram } from 'lucide-react';
+import { BRAND } from '@/lib/brand';
 
 export default function InstagramStrip() {
   const { t, lang } = useLang();
   const settings = useSiteSettings();
+  const instagram = settings.instagramUrl || BRAND.instagramUrl;
 
   const { data: assets = [] } = useQuery({
     queryKey: ['media-instagram'],
@@ -16,52 +18,41 @@ export default function InstagramStrip() {
     staleTime: 60_000,
   });
 
-  // Show up to 6 tiles; fill remainder with blush placeholders
   const tiles = [...assets.slice(0, 6)];
   while (tiles.length < 6) tiles.push(null);
 
   return (
-    <section className="py-12 sm:py-16 bg-background" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-7"
-        >
-          <div className="flex items-center gap-2.5">
-            <Instagram className="w-5 h-5 text-primary" />
-            <h2 className="text-xl sm:text-2xl font-heading font-bold text-foreground">{t('Our community', 'مجتمعنا')}</h2>
+    <section className="py-12 sm:py-16" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-7">
+          <div>
+            <p className="eyebrow text-muted-foreground mb-1">{t('Social', 'تابعنا')}</p>
+            <h2 className="font-display font-bold uppercase text-2xl sm:text-3xl tracking-tight">{t('On the feed', 'على الإنستغرام')}</h2>
           </div>
-          {settings.instagramUrl && (
-            <a href={settings.instagramUrl} target="_blank" rel="noopener"
-              className="flex items-center gap-2 text-sm text-primary font-medium hover:underline underline-offset-4">
-              {t('Follow @miniyo.lb', 'تابع @miniyo.lb')}
-              <Instagram className="w-4 h-4" />
-            </a>
-          )}
-        </motion.div>
+          <a href={instagram} target="_blank" rel="noopener" className="eyebrow flex items-center gap-2 hover:text-muted-foreground">
+            <Instagram className="w-4 h-4" /> @{BRAND.instagramHandle}
+          </a>
+        </div>
 
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
           {tiles.map((asset, i) => (
-            <motion.div
+            <motion.a
               key={i}
-              initial={{ opacity: 0, scale: 0.95 }}
-              whileInView={{ opacity: 1, scale: 1 }}
+              href={instagram}
+              target="_blank"
+              rel="noopener"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.35, delay: i * 0.05 }}
-              className="aspect-square rounded-2xl overflow-hidden bg-accent/25 group cursor-pointer"
+              transition={{ duration: 0.35, delay: i * 0.04 }}
+              className="aspect-square overflow-hidden bg-secondary group rounded-sm"
             >
-              {asset?.url
-                ? <img src={asset.url} alt={asset.name || ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                : (
-                  <div className="w-full h-full flex items-center justify-center bg-accent/20 group-hover:bg-accent/35 transition-colors">
-                    <Instagram className="w-6 h-6 text-muted-foreground/30" />
-                  </div>
-                )
-              }
-            </motion.div>
+              {asset?.url ? (
+                <img src={asset.url} alt={asset.name || ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center"><Instagram className="w-5 h-5 text-muted-foreground/30" /></div>
+              )}
+            </motion.a>
           ))}
         </div>
       </div>

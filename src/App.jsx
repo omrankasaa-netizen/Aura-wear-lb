@@ -71,9 +71,9 @@ const AuthenticatedApp = () => {
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
-          <p className="text-sm text-muted-foreground font-body">MiniYo</p>
+        <div className="flex flex-col items-center gap-5">
+          <img src="/brand/aura-mark.png" alt="AURA" className="h-12 w-auto animate-pulse" />
+          <div className="w-6 h-6 border-2 border-stone border-t-primary rounded-full animate-spin" />
         </div>
       </div>
     );

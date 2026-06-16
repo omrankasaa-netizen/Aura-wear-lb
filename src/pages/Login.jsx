@@ -34,7 +34,7 @@ export default function Login() {
       subtitle="Log in to your account"
       footer={
         <>
-          New to MiniYo?{" "}
+          New to AURA?{" "}
           <Link to="/register" className="text-primary font-semibold hover:underline">
             Create your account
           </Link>
@@ -111,7 +111,7 @@ export default function Login() {
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-center">
         <div className="flex items-center justify-center gap-1.5 text-sm font-medium text-foreground">
           <Sparkles className="w-4 h-4 text-primary" aria-hidden="true" />
-          Join MiniYo — it's free
+          Join AURA — it's free
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
           Create an account to track orders, earn rewards, and check out faster.

@@ -24,7 +24,7 @@ export default function AccountLayout() {
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
         <p className="text-muted-foreground">{t('Please log in to view your account.', 'الرجاء تسجيل الدخول.')}</p>
         <button onClick={() => base44.auth.redirectToLogin('/account')}
-          className="px-6 py-2.5 bg-primary text-primary-foreground rounded-full font-semibold text-sm">
+          className="btn-primary h-11 px-6">
           {t('Log In', 'تسجيل الدخول')}
         </button>
       </div>
@@ -45,10 +45,10 @@ export default function AccountLayout() {
         <div className="flex gap-6 flex-col md:flex-row">
           {/* Sidebar */}
           <aside className="md:w-56 shrink-0">
-            <div className="bg-card border border-border rounded-2xl p-4 space-y-1 sticky top-24">
+            <div className="bg-card border border-border rounded-sm p-4 space-y-1 sticky top-24">
               <div className="px-3 py-2 mb-2 border-b border-border">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <p className="font-heading font-semibold text-foreground text-sm truncate">{currentUser.full_name}</p>
+                  <p className="font-display uppercase tracking-wide text-foreground text-sm truncate">{currentUser.full_name}</p>
                 </div>
                 {(customer?.current_tier || customer?.membership_tier) && (
                   <div className="flex items-center gap-2 mb-1">
@@ -73,15 +73,15 @@ export default function AccountLayout() {
                 const active = exact ? location.pathname === to : location.pathname.startsWith(to);
                 return (
                   <Link key={to} to={to}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors
-                      ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-sm text-sm transition-colors
+                      ${active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}>
                     <Icon className="w-4 h-4 shrink-0" />
                     {label}
                   </Link>
                 );
               })}
               <button onClick={logout}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors mt-2">
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-sm text-sm text-destructive hover:bg-destructive/10 transition-colors mt-2">
                 <LogOut className="w-4 h-4" />
                 {t('Log Out', 'تسجيل الخروج')}
               </button>
