@@ -140,7 +140,7 @@ export default function AdminDashboard() {
           <h1 className="text-2xl font-heading font-bold text-foreground">
             Welcome back{currentUser?.full_name ? `, ${currentUser.full_name.split(' ')[0]}` : ''} 👋
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Here's what's happening at MiniYo today.</p>
+          <p className="text-sm text-muted-foreground mt-1">Here's what's happening at AURA today.</p>
         </div>
 
         {/* KPIs */}

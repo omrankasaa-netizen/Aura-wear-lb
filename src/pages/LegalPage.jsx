@@ -9,15 +9,15 @@ import ReactMarkdown from 'react-markdown';
 const PAGE_META = {
   contact: {
     key: 'legal_contact',
-    en: { title: 'Contact Us', desc: 'Get in touch with the MiniYo team.' },
-    ar: { title: 'تواصل معنا', desc: 'تواصل مع فريق MiniYo.' },
-    default_en: `## Contact Us\n\nWhatsApp us or email management@miniyo.store — we'd love to hear from you!`,
-    default_ar: `## تواصل معنا\n\nراسلنا عبر واتساب أو على management@miniyo.store — يسعدنا التواصل معك!`,
+    en: { title: 'Contact Us', desc: 'Get in touch with the AURA team.' },
+    ar: { title: 'تواصل معنا', desc: 'تواصل مع فريق AURA.' },
+    default_en: `## Contact Us\n\nWhatsApp us at +961 71 66 29 06 or DM us on Instagram @aura.wear.leb — we'd love to hear from you!`,
+    default_ar: `## تواصل معنا\n\nراسلنا عبر واتساب على 06 29 66 71 961+ أو على إنستغرام @aura.wear.leb — يسعدنا التواصل معك!`,
   },
   privacy: {
     key: 'legal_privacy',
-    en: { title: 'Privacy Policy', desc: 'How MiniYo collects and uses your data.' },
-    ar: { title: 'سياسة الخصوصية', desc: 'كيف تجمع MiniYo بياناتك وتستخدمها.' },
+    en: { title: 'Privacy Policy', desc: 'How AURA collects and uses your data.' },
+    ar: { title: 'سياسة الخصوصية', desc: 'كيف تجمع AURA بياناتك وتستخدمها.' },
     default_en: `## Privacy Policy
 
 **Last updated: June 2026**
@@ -37,7 +37,7 @@ We do not sell your personal data. We share it only with delivery partners as ne
 We retain your data for as long as your account is active, or as needed to provide services.
 
 ### 5. Contact
-Questions? Reach us on WhatsApp or Instagram @miniyo.lb
+Questions? Reach us on WhatsApp or Instagram @aura.wear.leb
 `,
     default_ar: `## سياسة الخصوصية
 
@@ -58,18 +58,18 @@ Questions? Reach us on WhatsApp or Instagram @miniyo.lb
 نحتفظ ببياناتك طالما حسابك نشط، أو حسب الحاجة لتقديم الخدمات.
 
 ### 5. تواصل معنا
-أسئلة؟ تواصل معنا عبر واتساب أو انستغرام @miniyo.lb
+أسئلة؟ تواصل معنا عبر واتساب أو انستغرام @aura.wear.leb
 `
   },
   terms: {
     key: 'legal_terms',
-    en: { title: 'Terms & Conditions', desc: 'Terms governing use of MiniYo.' },
-    ar: { title: 'الشروط والأحكام', desc: 'الشروط التي تحكم استخدام MiniYo.' },
+    en: { title: 'Terms & Conditions', desc: 'Terms governing use of AURA.' },
+    ar: { title: 'الشروط والأحكام', desc: 'الشروط التي تحكم استخدام AURA.' },
     default_en: `## Terms & Conditions
 
 **Last updated: June 2026**
 
-By using the MiniYo website you agree to these terms.
+By using the AURA website you agree to these terms.
 
 ### 1. Orders
 - All orders are subject to product availability.
@@ -88,13 +88,13 @@ We accept Cash on Delivery and Whish Money.
 See our Returns Policy page.
 
 ### 5. Intellectual Property
-All content on this site belongs to MiniYo and may not be reproduced without permission.
+All content on this site belongs to AURA and may not be reproduced without permission.
 `,
     default_ar: `## الشروط والأحكام
 
 **آخر تحديث: يونيو 2026**
 
-باستخدامك موقع MiniYo فإنك توافق على هذه الشروط.
+باستخدامك موقع AURA فإنك توافق على هذه الشروط.
 
 ### 1. الطلبات
 - تخضع جميع الطلبات لتوافر المنتج.
@@ -113,7 +113,7 @@ All content on this site belongs to MiniYo and may not be reproduced without per
 راجع صفحة سياسة الإرجاع.
 
 ### 5. الملكية الفكرية
-جميع محتويات الموقع ملك لـ MiniYo ولا يجوز إعادة إنتاجها دون إذن.
+جميع محتويات الموقع ملك لـ AURA ولا يجوز إعادة إنتاجها دون إذن.
 `
   },
   shipping: {
@@ -167,8 +167,8 @@ Payment is collected upon delivery in USD or the equivalent in LBP at the curren
   },
   returns: {
     key: 'legal_returns',
-    en: { title: 'Returns & Exchanges', desc: 'How to return or exchange a MiniYo order.' },
-    ar: { title: 'الإرجاع والاستبدال', desc: 'كيفية إرجاع أو استبدال طلب MiniYo.' },
+    en: { title: 'Returns & Exchanges', desc: 'How to return or exchange an AURA order.' },
+    ar: { title: 'الإرجاع والاستبدال', desc: 'كيفية إرجاع أو استبدال طلب AURA.' },
     default_en: `## Returns & Exchanges Policy
 
 **Last updated: June 2026**
@@ -238,12 +238,12 @@ export default function LegalPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-3xl mx-auto px-4 py-10">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
         <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6">
           <ArrowLeft className="w-4 h-4" /> {t('Back to Home', 'العودة للرئيسية')}
         </Link>
-        <h1 className="text-3xl font-heading font-bold text-foreground mb-8">{title}</h1>
-        <div className="prose prose-sm max-w-none text-foreground prose-headings:font-heading prose-headings:text-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground">
+        <h1 className="font-display font-bold uppercase text-3xl tracking-tight mb-8">{title}</h1>
+        <div className="prose prose-sm max-w-none text-foreground prose-headings:font-display prose-headings:uppercase prose-headings:tracking-tight prose-headings:text-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground">
           <ReactMarkdown>{content}</ReactMarkdown>
         </div>
       </div>

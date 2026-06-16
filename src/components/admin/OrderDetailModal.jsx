@@ -281,7 +281,7 @@ function buildPrintHTML(order, items) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Order ${order.order_number}</title>
   <style>body{font-family:Arial,sans-serif;font-size:13px;padding:20px;color:#222}h1{font-size:20px;margin-bottom:4px}.label{color:#888;font-size:11px}table{width:100%;border-collapse:collapse;margin:12px 0}th{background:#f0f0f0;padding:6px 8px;text-align:left;font-size:11px}td{padding:6px 8px;border-bottom:1px solid #eee}.total-row td{font-weight:bold;border-top:2px solid #222}.cod{background:#fffbe6;border:1px solid #f6c90e;padding:8px 12px;border-radius:6px;font-size:15px;font-weight:bold;margin-top:12px}.gift{background:#fff7ed;border:1px dashed #d97706;padding:8px 12px;border-radius:6px;margin-top:12px}</style>
   </head><body>
-  <h1>MiniYo — ${hidePrice ? 'Packing Slip' : 'Order Slip'}</h1>
+  <h1>AURA — ${hidePrice ? 'Packing Slip' : 'Order Slip'}</h1>
   <p class="label">Order #</p><p><strong>${order.order_number}</strong></p>
   <p class="label">Date</p><p>${order.order_date ? new Date(order.order_date).toLocaleDateString('en-GB') : ''}</p>
   <p class="label">Customer</p><p>${order.customer_name} · ${order.customer_phone}</p>
@@ -298,5 +298,5 @@ function buildPrintHTML(order, items) {
 
 function buildWhatsAppMsg(order, items) {
   const itemLines = items.map(i => `• ${i.product_name}${i.size ? ` (${i.size}` : ''}${i.color ? `/${i.color})` : i.size ? ')' : ''} x${i.quantity} — $${(i.line_total_usd || i.unit_price_usd * i.quantity).toFixed(2)}`).join('\n');
-  return `*MiniYo Order Confirmation*\nOrder: ${order.order_number}\n\n${itemLines}\n\nDelivery: $${(order.delivery_fee_usd || 0).toFixed(2)}\n*Total: $${(order.grand_total_usd || 0).toFixed(2)}*\n\nDeliver to: ${[order.building, order.street, order.district, order.city].filter(Boolean).join(', ')}\nPhone: ${order.customer_phone}\n${order.payment_method === 'Cash on Delivery' ? `\n💵 Please have $${(order.grand_total_usd || 0).toFixed(2)} ready for the driver.` : ''}`;
+  return `*AURA Order Confirmation*\nOrder: ${order.order_number}\n\n${itemLines}\n\nDelivery: $${(order.delivery_fee_usd || 0).toFixed(2)}\n*Total: $${(order.grand_total_usd || 0).toFixed(2)}*\n\nDeliver to: ${[order.building, order.street, order.district, order.city].filter(Boolean).join(', ')}\nPhone: ${order.customer_phone}\n${order.payment_method === 'Cash on Delivery' ? `\n💵 Please have $${(order.grand_total_usd || 0).toFixed(2)} ready for the driver.` : ''}`;
 }
