@@ -28,6 +28,16 @@ export async function sendEmail({ to, subject, html, email_type, order_id, custo
   let status = 'pending';
   let error_message = null;
 
+  // Resend's `to` must be a single email string or an ARRAY of emails. A single
+  // comma-joined string (e.g. "a@x.com, b@y.com") is rejected with a 422
+  // validation_error. Normalize multi-recipient values into an array; keep the
+  // readable joined string for the EmailLog row below.
+  const toList = Array.isArray(to)
+    ? to
+    : String(to || '').split(',').map((e) => e.trim()).filter(Boolean);
+  const toForApi = toList.length > 1 ? toList : (toList[0] || '');
+  const toForLog = Array.isArray(to) ? to.join(', ') : String(to || '');
+
   if (resendKey) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
@@ -36,7 +46,7 @@ export async function sendEmail({ to, subject, html, email_type, order_id, custo
           Authorization: `Bearer ${resendKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ from, to, subject, html }),
+        body: JSON.stringify({ from, to: toForApi, subject, html }),
       });
       if (res.ok) {
         status = 'sent';
@@ -56,7 +66,7 @@ export async function sendEmail({ to, subject, html, email_type, order_id, custo
 
   const log = createRecord('EmailLog', {
     email_type,
-    recipient_email: to,
+    recipient_email: toForLog,
     subject,
     order_id: order_id || '',
     customer_id: customer_id || '',
