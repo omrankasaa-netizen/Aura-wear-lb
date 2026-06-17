@@ -5,7 +5,7 @@ import { createRecord, nowIso } from './db.js';
 // Normalize a `from` value into a Resend-valid `Name <email>` or `email` form.
 // Strips stray quotes/whitespace and validates an email is present; falls back safely.
 export function normalizeFrom(raw) {
-  const fallback = 'MiniYo <onboarding@resend.dev>';
+  const fallback = 'AURA WEAR <onboarding@resend.dev>';
   if (!raw) return fallback;
   let v = String(raw).trim().replace(/^["']|["']$/g, '').trim();
   // Extract any email-looking token.
