@@ -21,12 +21,13 @@ import { runSeed } from './seed.js';
 
 // Build the verification-code email HTML.
 function otpEmailHtml(code) {
-  return `<!doctype html><html><body style="margin:0;background:#faf7f2;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
+  return `<!doctype html><html><body style="margin:0;background:#f4f1ea;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
     <div style="max-width:480px;margin:0 auto;padding:32px 24px;">
-      <h1 style="font-size:20px;color:#5a4a3f;margin:0 0 8px;">Verify your MiniYo email</h1>
-      <p style="color:#6b5d52;font-size:14px;line-height:1.6;margin:0 0 24px;">Enter this code to confirm your email address. It expires in 10 minutes.</p>
-      <div style="font-size:34px;font-weight:700;letter-spacing:8px;color:#3f342c;background:#fff;border:1px solid #ece4da;border-radius:12px;padding:18px;text-align:center;">${code}</div>
-      <p style="color:#9a8d80;font-size:12px;margin:24px 0 0;">If you didn't create a MiniYo account, you can safely ignore this email.</p>
+      <p style="font-size:18px;font-weight:700;letter-spacing:4px;color:#111111;margin:0 0 20px;">AURA WEAR</p>
+      <h1 style="font-size:20px;font-weight:600;color:#111111;margin:0 0 8px;">Verify your email</h1>
+      <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 24px;">Enter this code to confirm your email address. It expires in 10 minutes.</p>
+      <div style="font-size:34px;font-weight:700;letter-spacing:8px;color:#111111;background:#fff;border:1px solid #ece7df;border-radius:4px;padding:18px;text-align:center;">${code}</div>
+      <p style="color:#999;font-size:12px;margin:24px 0 0;">If you didn't create an AURA WEAR account, you can safely ignore this email.</p>
     </div></body></html>`;
 }
 
@@ -98,7 +99,7 @@ app.post('/api/auth/register', (req, res) => {
     if (process.env.MINIYO_OTP_DEBUG === '1') console.log(`[otp:register] ${user.email} -> ${code}`);
     sendEmail({
       to: user.email,
-      subject: 'Your MiniYo verification code',
+      subject: 'Your AURA WEAR verification code',
       html: otpEmailHtml(code),
       email_type: 'otp_verification',
       customer_id: user.id,
@@ -134,7 +135,7 @@ app.post('/api/auth/resend-otp', (req, res) => {
       if (process.env.MINIYO_OTP_DEBUG === '1') console.log(`[otp:resend] ${user.email} -> ${code}`);
       sendEmail({
         to: user.email,
-        subject: 'Your MiniYo verification code',
+        subject: 'Your AURA WEAR verification code',
         html: otpEmailHtml(code),
         email_type: 'otp_verification',
         customer_id: user.id,
@@ -349,5 +350,5 @@ if (fs.existsSync(DIST)) {
 // Binding to the default (localhost) causes the proxy to 502 even though the
 // server logs that it is "listening".
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`MiniYo server listening on 0.0.0.0:${PORT}`);
+  console.log(`AURA WEAR server listening on 0.0.0.0:${PORT}`);
 });
