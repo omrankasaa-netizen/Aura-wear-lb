@@ -9,6 +9,8 @@ export default function OfferBanner() {
     <section className="py-4 sm:py-8">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
         <div className="relative overflow-hidden bg-charcoal text-white rounded-sm">
+          <img src="/brand/aura-offer.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-charcoal/65" />
           <div className="relative px-6 sm:px-12 py-12 sm:py-16 text-center">
             <p className="eyebrow text-white/60 mb-3">{t('Limited drop', 'دروب محدود')}</p>
             <h2 className="font-display font-bold uppercase text-3xl sm:text-5xl tracking-tight leading-none mb-4">
