@@ -11,6 +11,7 @@ export default function ShopTheLook() {
         <div className="grid lg:grid-cols-2 gap-4">
           {/* Editorial look block */}
           <Link to="/shop?category=matching-sets" className="group relative block aspect-[4/5] sm:aspect-square overflow-hidden bg-navy rounded-sm">
+            <img src="/brand/aura-shopthelook.jpg" alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
             <div className="absolute bottom-0 left-0 p-6 sm:p-8">
               <p className="eyebrow text-white/70 mb-2">{t('Shop the look', 'تسوّق الإطلالة')}</p>
