@@ -1,6 +1,64 @@
 import { createRecord, getRecord, updateRecord, queryRecords, bulkCreate, nowIso } from './db.js';
 import { sendEmail } from './email.js';
 
+// ─── Brand / email constants ────────────────────────────────────────────────
+// Public site base used for links inside automated emails.
+const STORE_BASE_URL = 'https://aura-lb.shop';
+const STORE_NAME = 'AURA WEAR';
+const SUPPORT_EMAIL = 'support@aura-lb.shop';
+
+// First token of a name; falls back to the provided default ("there", local-part…).
+function firstName(name, fallback = 'there') {
+  const tok = String(name || '').trim().split(/\s+/)[0];
+  return tok || fallback;
+}
+
+// Format a date for email body, e.g. "June 17, 2026".
+function formatOrderDate(value) {
+  const d = value ? new Date(value) : new Date();
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+// Pre-rendered <table> of order items for the branded order emails.
+function orderItemsTableHtml(items) {
+  const td = 'padding:10px 8px;border-bottom:1px solid #ece7df;font-size:14px;color:#1a1a1a;';
+  const tdR = td + 'text-align:right;white-space:nowrap;';
+  const th = 'padding:8px;border-bottom:2px solid #111111;font-size:11px;color:#6b6b6b;text-transform:uppercase;letter-spacing:.8px;font-weight:600;';
+  const rows = items.map((it) =>
+    `<tr><td style="${td}">${it.product_name}${[it.size, it.color].filter(Boolean).length ? ` <span style="color:#8a8a8a;font-size:12px;">${[it.size, it.color].filter(Boolean).join(' / ')}</span>` : ''}</td><td style="${tdR}">×${it.quantity}</td><td style="${tdR}">$${Number(it.unit_price_usd || 0).toFixed(2)}</td><td style="${tdR}">$${Number(it.line_total_usd || 0).toFixed(2)}</td></tr>`
+  ).join('');
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:8px 0 4px;">`
+    + `<thead><tr>`
+    + `<th align="left" style="${th}">Item</th>`
+    + `<th align="right" style="${th}">Qty</th>`
+    + `<th align="right" style="${th}">Price</th>`
+    + `<th align="right" style="${th}">Total</th>`
+    + `</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// Shared branded HTML wrapper for direct customer emails. AURA editorial palette
+// (#111111 black header, beige #efe9df background, olive #5A5E45 accent button),
+// inline styles only (email-safe).
+function emailShell(headingHtml, bodyHtml) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+  <body style="margin:0;background:#f4f1ea;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f1ea;padding:24px 0;"><tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:4px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+        <tr><td style="background:#111111;padding:24px 28px;"><span style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:4px;">AURA WEAR</span></td></tr>
+        <tr><td style="padding:30px 28px;">${headingHtml}${bodyHtml}</td></tr>
+        <tr><td style="padding:18px 28px;border-top:1px solid #ece7df;font-size:12px;color:#8a8a8a;">
+          Need help? Email <a href="mailto:${SUPPORT_EMAIL}" style="color:#5A5E45;">${SUPPORT_EMAIL}</a> · AURA WEAR · aura-lb.shop
+        </td></tr>
+      </table>
+    </td></tr></table>
+  </body></html>`;
+}
+
+function btn(href, label) {
+  return `<p style="margin:26px 0;"><a href="${href}" style="display:inline-block;background:#111111;color:#fff;text-decoration:none;padding:13px 26px;border-radius:2px;font-weight:600;letter-spacing:1px;text-transform:uppercase;font-size:13px;">${label}</a></p>`;
+}
+
 // All functions return a plain object. The HTTP layer wraps it as { data, status }.
 // `user` is the authenticated user (or null for public-invokable functions).
 
@@ -214,6 +272,30 @@ function membershipEngine(body) {
       newTier = 'Gold';
       upgraded = true;
     }
+    // Send a branded tier-upgrade email when the tier actually changed.
+    // Best-effort and non-blocking (sendEmail never throws and always writes an
+    // EmailLog row; the .catch keeps tier logic unblocked). Idempotency is
+    // provided by the silver_granted/gold_granted flags above, so it sends only
+    // once per tier.
+    if (upgraded && newTier !== currentTier) {
+      const recipient = customer.email
+        || queryRecords('User', { query: { id: customer_id }, limit: 1 })[0]?.email
+        || '';
+      if (recipient) {
+        const subject = `You've reached ${newTier} status at AURA WEAR`;
+        const heading = `<h2 style="margin:0 0 14px;font-size:20px;font-weight:600;color:#111111;letter-spacing:.3px;">Congratulations — you're now ${escapeHtml(newTier)}.</h2>`;
+        const bodyHtml = `<p style="margin:0 0 16px;color:#444;">You've been upgraded from ${escapeHtml(currentTier)} to ${escapeHtml(newTier)}. Enjoy your new member benefits.</p>
+          ${btn(`${STORE_BASE_URL}/account/membership`, 'See your benefits')}`;
+        sendEmail({
+          to: recipient,
+          subject,
+          html: emailShell(heading, bodyHtml),
+          email_type: 'membership_tier_updated',
+          customer_id,
+          trigger_event: 'membership.tier.updated',
+        }).catch(() => {});
+      }
+    }
     return { upgraded, newTier };
   }
 
@@ -283,30 +365,34 @@ async function sendOrderConfirmation(body) {
   if (already.length > 0) return { status: 'already_sent', message: 'Confirmation email already sent for this order' };
 
   const items = queryRecords('OrderItem', { query: { order_id } });
-  const itemsHtml = items.map((it) =>
-    `<tr><td>${it.product_name} ${[it.size, it.color].filter(Boolean).join(' / ')}</td><td>×${it.quantity}</td><td>$${Number(it.unit_price_usd || 0).toFixed(2)}</td><td>$${Number(it.line_total_usd || 0).toFixed(2)}</td></tr>`
-  ).join('');
+  const orderDate = formatOrderDate(order.order_date || order.created_date);
+  const orderTotal = `$${Number(order.grand_total_usd || 0).toFixed(2)}`;
   const giftHtml = order.is_gift
-    ? `<div style="margin-top:12px;padding:10px;border:1px dashed #d97706;border-radius:8px;background:#fffbeb">
-        <p style="margin:0;font-weight:bold;color:#92400e">🎁 This order is a gift</p>
-        ${order.gift_wrapping ? '<p style="margin:4px 0 0;color:#92400e">Gift wrapping requested.</p>' : ''}
-        ${order.gift_message ? `<p style="margin:4px 0 0;color:#92400e">Message: "${escapeHtml(order.gift_message)}"</p>` : ''}
-        ${order.hide_invoice_price ? '<p style="margin:4px 0 0;color:#92400e">Prices will be hidden on the packing slip.</p>' : ''}
+    ? `<div style="margin:16px 0;padding:12px 14px;border:1px solid #5A5E45;border-radius:2px;background:#f6f5ef;">
+        <p style="margin:0;font-weight:700;color:#5A5E45;">This order is a gift</p>
+        ${order.gift_wrapping ? '<p style="margin:4px 0 0;color:#5A5E45;">Gift wrapping requested.</p>' : ''}
+        ${order.gift_message ? `<p style="margin:4px 0 0;color:#5A5E45;">Message: "${escapeHtml(order.gift_message)}"</p>` : ''}
+        ${order.hide_invoice_price ? '<p style="margin:4px 0 0;color:#5A5E45;">Prices will be hidden on the packing slip.</p>' : ''}
       </div>`
     : '';
-  const html = `<!DOCTYPE html><html><body><h2>Order Confirmation</h2>
-    <p>Order #: <strong>${order.order_number}</strong></p>
-    <table border="1" cellpadding="6"><tbody>${itemsHtml}</tbody></table>
-    <p>Subtotal: $${Number(order.subtotal_usd || 0).toFixed(2)}<br/>
-    Discount: $${Number(order.discount_usd || 0).toFixed(2)}<br/>
-    Delivery: $${Number(order.delivery_fee_usd || 0).toFixed(2)}<br/>
-    <strong>Total: $${Number(order.grand_total_usd || 0).toFixed(2)}</strong></p>
-    <p>Payment: ${order.payment_method}</p>
-    ${giftHtml}</body></html>`;
+  const subject = `We received your order #${order.order_number}`;
+  const heading = `<h2 style="margin:0 0 14px;font-size:20px;font-weight:600;color:#111111;letter-spacing:.3px;">Thank you, ${escapeHtml(firstName(order.customer_name))}.</h2>`;
+  const bodyHtml = `<p style="margin:0 0 16px;color:#444;">We've received your order and will confirm it shortly.</p>
+    <p style="margin:0 0 16px;color:#444;">Order <strong>#${escapeHtml(order.order_number)}</strong><br/>
+    Date: ${escapeHtml(orderDate)}<br/>
+    Total: <strong>${orderTotal}</strong></p>
+    ${orderItemsTableHtml(items)}
+    ${giftHtml}
+    ${btn(`${STORE_BASE_URL}/account/orders/${order_id}`, 'View your order')}`;
 
   const result = await sendEmail({
-    to: order.customer_email, subject: 'Order Confirmation', html,
-    email_type: 'order_confirmation', order_id, trigger_event: 'order_created',
+    to: order.customer_email,
+    subject,
+    html: emailShell(heading, bodyHtml),
+    email_type: 'order_confirmation',
+    order_id,
+    customer_id: order.customer_id || '',
+    trigger_event: 'order.submitted',
   });
   return { status: result.status, log_id: result.log_id };
 }
@@ -318,7 +404,27 @@ async function sendOrderNotification(body) {
   const order = getRecord('Order', order_id);
   if (!order) return { _status: 404, error: 'Order not found' };
 
-  const adminEmail = process.env.MINIYO_ADMIN_EMAIL || process.env.MINIYO_EMAIL_FROM || 'management@miniyo.store';
+  // Order-alert recipients. The store owner's Gmail always gets a copy so new
+  // orders are never missed; any MINIYO_ADMIN_EMAIL / MINIYO_ORDER_ALERT_EMAILS
+  // (comma-separated) are merged in. De-duped, case-insensitive.
+  const recipients = [
+    'aura.wear.lb26@gmail.com',
+    process.env.MINIYO_ADMIN_EMAIL,
+    process.env.MINIYO_ORDER_ALERT_EMAILS,
+  ]
+    .filter(Boolean)
+    .flatMap((v) => String(v).split(','))
+    .map((e) => e.trim())
+    .filter(Boolean);
+  const seenR = new Set();
+  const adminEmail = recipients
+    .filter((e) => {
+      const k = e.toLowerCase();
+      if (seenR.has(k)) return false;
+      seenR.add(k);
+      return true;
+    })
+    .join(', ');
   const already = queryRecords('EmailLog', {
     query: { email_type: 'order_notification', order_id, status: 'sent' }, sort: 'sent_at', limit: 1,
   });
@@ -376,34 +482,81 @@ async function sendOrderStatusUpdate(body) {
   });
   if (already.length > 0) return { status: 'already_sent', message: `${new_status} email already sent` };
 
+  const orderTotal = `$${Number(order.grand_total_usd || 0).toFixed(2)}`;
+
+  // Confirmed: send a richer branded confirmation with the full item table.
+  if (new_status === 'Confirmed') {
+    const items = queryRecords('OrderItem', { query: { order_id } });
+    const orderDate = formatOrderDate(order.order_date || order.created_date);
+    const subject = `Your order #${order.order_number} is confirmed`;
+    const heading = `<h2 style="margin:0 0 14px;font-size:20px;font-weight:600;color:#111111;letter-spacing:.3px;">Your order is confirmed.</h2>`;
+    const bodyHtml = `<p style="margin:0 0 16px;color:#444;">Good news ${escapeHtml(firstName(order.customer_name))} — your order is confirmed and we're preparing it.</p>
+      <p style="margin:0 0 16px;color:#444;">Order <strong>#${escapeHtml(order.order_number)}</strong><br/>
+      Date: ${escapeHtml(orderDate)}<br/>
+      Total: <strong>${orderTotal}</strong></p>
+      ${orderItemsTableHtml(items)}
+      ${btn(`${STORE_BASE_URL}/account/orders/${order_id}`, 'View your order')}`;
+    const result = await sendEmail({
+      to: order.customer_email,
+      subject,
+      html: emailShell(heading, bodyHtml),
+      email_type: 'order_status_update',
+      order_id,
+      customer_id: order.customer_id || '',
+      trigger_event: trigger,
+    });
+    return { status: result.status, log_id: result.log_id };
+  }
+
+  // All other statuses: branded-shell status note.
   const tpl = STATUS_TEMPLATES[new_status];
-  const html = `<!DOCTYPE html><html><body><h2>${tpl.subject}</h2><p>${tpl.message}</p>
-    <p>Order #: <strong>${order.order_number}</strong><br/>Status: ${new_status}<br/>
-    Total: $${Number(order.grand_total_usd || 0).toFixed(2)}</p></body></html>`;
+  const heading = `<h2 style="margin:0 0 14px;font-size:20px;font-weight:600;color:#111111;letter-spacing:.3px;">${escapeHtml(tpl.subject)}</h2>`;
+  const bodyHtml = `<p style="margin:0 0 16px;color:#444;">${escapeHtml(tpl.message)}</p>
+    <p style="margin:0 0 16px;color:#444;">Order <strong>#${escapeHtml(order.order_number)}</strong><br/>
+    Status: ${escapeHtml(new_status)}<br/>
+    Total: <strong>${orderTotal}</strong></p>
+    ${btn(`${STORE_BASE_URL}/account/orders/${order_id}`, 'View your order')}`;
 
   const result = await sendEmail({
-    to: order.customer_email, subject: tpl.subject, html,
-    email_type: 'order_status_update', order_id, trigger_event: trigger,
+    to: order.customer_email,
+    subject: tpl.subject,
+    html: emailShell(heading, bodyHtml),
+    email_type: 'order_status_update',
+    order_id,
+    customer_id: order.customer_id || '',
+    trigger_event: trigger,
   });
   return { status: result.status, log_id: result.log_id };
 }
 
 async function sendWelcomeEmailNew(body) {
-  const { customer_id, email } = body;
+  const { customer_id, email, name, full_name } = body;
   if (!customer_id || !email) return { _status: 400, error: 'customer_id and email required' };
   const already = queryRecords('EmailLog', {
     query: { email_type: 'welcome', customer_id, status: 'sent' }, sort: 'sent_at', limit: 1,
   });
   if (already.length > 0) return { status: 'already_sent', message: 'Welcome email already sent' };
 
-  const html = `<!DOCTYPE html><html><body><h1>Welcome to MiniYo! 🎉</h1>
-    <p>You're now a Bronze member with exclusive benefits!</p>
-    <ul><li>2 Free Deliveries on your first orders</li><li>5% off all purchases</li>
-    <li>Auto-upgrade to Silver & Gold tiers</li></ul></body></html>`;
-
+  const localPart = String(email).split('@')[0] || 'there';
+  // Ignore a name that's actually just the email (Register.jsx passes name: email).
+  const realName = [full_name, name].find((n) => n && !String(n).includes('@'));
+  const fname = firstName(realName, localPart);
+  const subject = `Welcome to AURA WEAR, ${fname}`;
+  const heading = `<h2 style="margin:0 0 14px;font-size:20px;font-weight:600;color:#111111;letter-spacing:.3px;">Welcome, ${escapeHtml(fname)}.</h2>`;
+  const bodyHtml = `<p style="margin:0 0 16px;color:#444;">Thanks for creating your AURA WEAR account — you're now a Bronze member.</p>
+    <ul style="margin:0 0 16px;padding-left:20px;color:#444;line-height:1.8;">
+      <li>2 free deliveries on your first orders</li>
+      <li>5% off all purchases</li>
+      <li>Automatic upgrades to Silver &amp; Gold tiers as you shop</li>
+    </ul>
+    ${btn(`${STORE_BASE_URL}/account`, 'Go to your account')}`;
   const result = await sendEmail({
-    to: email, subject: 'Welcome to MiniYo', html,
-    email_type: 'welcome', customer_id, trigger_event: 'account_created',
+    to: email,
+    subject,
+    html: emailShell(heading, bodyHtml),
+    email_type: 'welcome',
+    customer_id,
+    trigger_event: 'user.registered',
   });
   return { status: result.status, log_id: result.log_id };
 }
