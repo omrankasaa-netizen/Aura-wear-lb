@@ -406,7 +406,10 @@ async function sendOrderNotification(body) {
 
   // Order-alert recipients. The store owner's Gmail always gets a copy so new
   // orders are never missed; any MINIYO_ADMIN_EMAIL / MINIYO_ORDER_ALERT_EMAILS
-  // (comma-separated) are merged in. De-duped, case-insensitive.
+  // (comma-separated) are merged in. De-duped, case-insensitive. The seed
+  // super-admin placeholder (admin@aura.store) is excluded because it is not a
+  // real mailbox and would bounce / hurt sender reputation.
+  const PLACEHOLDER_RECIPIENTS = new Set(['admin@aura.store', 'admin@miniyo.store', 'management@miniyo.store']);
   const recipients = [
     'aura.wear.lb26@gmail.com',
     process.env.MINIYO_ADMIN_EMAIL,
@@ -420,6 +423,7 @@ async function sendOrderNotification(body) {
   const adminEmail = recipients
     .filter((e) => {
       const k = e.toLowerCase();
+      if (PLACEHOLDER_RECIPIENTS.has(k)) return false;
       if (seenR.has(k)) return false;
       seenR.add(k);
       return true;
