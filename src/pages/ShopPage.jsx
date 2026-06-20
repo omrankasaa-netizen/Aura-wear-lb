@@ -90,6 +90,21 @@ export default function ShopPage() {
     for (const img of images) { if (!m[img.product_id] || img.is_primary) m[img.product_id] = img.url; }
     return m;
   }, [images]);
+  // Full per-product photo set (primary first, then sort_order) with framing
+  // metadata, for the in-card carousel.
+  const cardImagesMap = useMemo(() => {
+    const m = {};
+    for (const img of images) {
+      (m[img.product_id] ||= []).push(img);
+    }
+    for (const id of Object.keys(m)) {
+      m[id] = m[id]
+        .slice()
+        .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0) || (a.sort_order || 0) - (b.sort_order || 0))
+        .map(img => ({ url: img.url, focal: img.focal, crop: img.crop, alt: img.alt }));
+    }
+    return m;
+  }, [images]);
   const variantsByProduct = useMemo(() => {
     const m = {};
     for (const v of variants) { if (!m[v.product_id]) m[v.product_id] = []; m[v.product_id].push(v); }
@@ -117,8 +132,8 @@ export default function ShopPage() {
     const totalStock = p.has_variants && pvs.length > 0
       ? pvs.reduce((s, v) => s + (v.qty_on_hand || 0), 0)
       : (p.stock_quantity || 0);
-    return { ...p, primaryImage: imgMap[p.id] || null, totalStock };
-  }), [products, imgMap, variantsByProduct]);
+    return { ...p, primaryImage: imgMap[p.id] || null, cardImages: cardImagesMap[p.id] || [], totalStock };
+  }), [products, imgMap, cardImagesMap, variantsByProduct]);
 
   function isOnSale(p) {
     if (p.compare_at_price_usd && p.compare_at_price_usd > p.price_usd) return true;
