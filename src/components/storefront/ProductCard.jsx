@@ -8,6 +8,7 @@ import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { motion } from 'framer-motion';
 import WishlistHeart from './WishlistHeart';
 import { BRAND, whatsappLink } from '@/lib/brand';
+import CardImageCarousel from './CardImageCarousel';
 
 function Badge({ children, tone = 'dark' }) {
   const tones = {
@@ -40,6 +41,13 @@ export default function ProductCard({ product }) {
   const primaryImg = product.primaryImage || product.image_url;
   const secondImg = product.secondaryImage || product.hoverImage;
 
+  // Full photo set for the in-card carousel. Prefer the rich `cardImages` array
+  // (each { url, focal?, crop?, alt? }) when a grid passes it; otherwise fall
+  // back to the legacy primary/secondary URLs so existing callers keep working.
+  const cardImages = (Array.isArray(product.cardImages) && product.cardImages.length > 0)
+    ? product.cardImages
+    : [primaryImg, secondImg].filter(Boolean).map(url => ({ url, alt: name }));
+
   function handleAdd(e) {
     e.preventDefault();
     if (isOutOfStock || product.has_variants) return;
@@ -54,18 +62,8 @@ export default function ProductCard({ product }) {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="group">
       <Link to={`/product/${product.slug}`} className="block">
-        <div className="relative aspect-[4/5] bg-secondary overflow-hidden rounded-sm">
-          {primaryImg ? (
-            <>
-              <img src={primaryImg} alt={name}
-                className={`w-full h-full object-cover transition-opacity duration-500 ${secondImg ? 'group-hover:opacity-0' : 'group-hover:scale-105'}`} />
-              {secondImg && (
-                <img src={secondImg} alt="" className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-              )}
-            </>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center"><img src="/brand/aura-mark.png" alt="" className="w-10 h-10 opacity-20" /></div>
-          )}
+        <div className="relative aspect-[3/4] bg-secondary overflow-hidden rounded-sm">
+          <CardImageCarousel images={cardImages} fallbackAlt={name} rtl={lang === 'ar'} />
 
           {/* Badges */}
           <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">

@@ -20,18 +20,26 @@ export default function ProductRow({ title, titleAr, filter, viewAllLink }) {
     queryKey: ['product-images-home', rawProducts.map(p => p.id).join(',')],
     queryFn: async () => {
       if (rawProducts.length === 0) return [];
-      return base44.entities.ProductImage.filter({ is_primary: true }, 'sort_order', 100);
+      return base44.entities.ProductImage.list('sort_order', 500);
     },
     enabled: rawProducts.length > 0,
     staleTime: 60_000,
   });
 
   const imgMap = {};
+  const cardImagesMap = {};
   for (const img of allImages) {
-    if (!imgMap[img.product_id]) imgMap[img.product_id] = img.url;
+    (cardImagesMap[img.product_id] ||= []).push(img);
+    if (!imgMap[img.product_id] || img.is_primary) imgMap[img.product_id] = img.url;
+  }
+  for (const id of Object.keys(cardImagesMap)) {
+    cardImagesMap[id] = cardImagesMap[id]
+      .slice()
+      .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0) || (a.sort_order || 0) - (b.sort_order || 0))
+      .map(img => ({ url: img.url, focal: img.focal, crop: img.crop, alt: img.alt }));
   }
 
-  const products = rawProducts.map(p => ({ ...p, primaryImage: imgMap[p.id] || null }));
+  const products = rawProducts.map(p => ({ ...p, primaryImage: imgMap[p.id] || null, cardImages: cardImagesMap[p.id] || [] }));
 
   if (products.length === 0) return null;
 
