@@ -22,10 +22,20 @@ export default function WishlistPage() {
         base44.entities.ProductImage.list('-created_date', 2000),
       ]);
       const imgMap = {};
-      for (const img of imgs) { if (!imgMap[img.product_id] || img.is_primary) imgMap[img.product_id] = img.url; }
+      const cardImagesMap = {};
+      for (const img of imgs) {
+        if (!imgMap[img.product_id] || img.is_primary) imgMap[img.product_id] = img.url;
+        (cardImagesMap[img.product_id] ||= []).push(img);
+      }
+      for (const id of Object.keys(cardImagesMap)) {
+        cardImagesMap[id] = cardImagesMap[id]
+          .slice()
+          .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0) || (a.sort_order || 0) - (b.sort_order || 0))
+          .map(img => ({ url: img.url, focal: img.focal, crop: img.crop, alt: img.alt }));
+      }
       return prods
         .filter(p => wishlistIds.includes(p.id))
-        .map(p => ({ ...p, primaryImage: imgMap[p.id] || null }));
+        .map(p => ({ ...p, primaryImage: imgMap[p.id] || null, cardImages: cardImagesMap[p.id] || [] }));
     },
     enabled: wishlistIds.length > 0,
   });
