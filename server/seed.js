@@ -4,6 +4,7 @@ import {
 } from './db.js';
 import { registerUser, findUserByEmail } from './auth.js';
 import { DEFAULT_SHIPPING_ZONES } from './functions.js';
+import { seedStoreContent } from './seedContent.js';
 
 const SEED_VERSION = '3';
 
@@ -27,6 +28,31 @@ function seedAdmin() {
       full_name: 'AURA Super Admin',
       role: 'super_admin',
     });
+  }
+}
+
+// Promote the owner + any AURA_SUPER_ADMIN_EMAILS to super_admin. Idempotent
+// and promote-only: it never demotes an existing user, and creates a stub
+// account (random password — owner uses "forgot password") if one is missing.
+const OWNER_SUPER_ADMIN = 'omraniik@gmail.com';
+function seedSuperAdmins() {
+  const fromEnv = String(process.env.AURA_SUPER_ADMIN_EMAILS || '')
+    .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const emails = [...new Set([OWNER_SUPER_ADMIN.toLowerCase(), ...fromEnv])];
+  for (const email of emails) {
+    const existing = findUserByEmail(email);
+    if (!existing) {
+      registerUser({
+        email,
+        password: crypto.randomUUID(),
+        full_name: email.split('@')[0],
+        role: 'super_admin',
+      });
+      console.log(`[seed] created super_admin ${email}`);
+    } else if (existing.role !== 'super_admin') {
+      updateRecord('User', existing.id, { role: 'super_admin' });
+      console.log(`[seed] promoted ${email} to super_admin`);
+    }
   }
 }
 
@@ -744,18 +770,22 @@ export function runSeed() {
   if (kvGet('seed_version') === SEED_VERSION) {
     // Still ensure admin/settings idempotently in case of partial state.
     seedAdmin();
+    seedSuperAdmins();
     seedMembershipSettings();
     seedSiteSettings();
     seedShippingZones();
     seedCmsSections();
+    seedStoreContent();
     return;
   }
   seedAdmin();
+  seedSuperAdmins();
   seedMembershipSettings();
   seedSiteSettings();
   seedShippingZones();
   seedCatalog();
   seedCmsSections();
+  seedStoreContent();
   kvSet('seed_version', SEED_VERSION);
   console.log('[seed] complete');
 }

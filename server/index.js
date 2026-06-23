@@ -18,6 +18,7 @@ import {
 import { invokeFunction } from './functions.js';
 import { sendEmail } from './email.js';
 import { runSeed } from './seed.js';
+import { optimizeAndStore, bufferFromBase64 } from './imageOptimize.js';
 
 // Build the verification-code email HTML.
 function otpEmailHtml(code) {
@@ -203,6 +204,14 @@ app.post('/api/users/invite', (req, res) => {
     }
     const { email, role = 'staff' } = req.body || {};
     if (!email) return res.status(400).json({ error: 'email required' });
+    const VALID_INVITE_ROLES = ['staff', 'admin', 'super_admin'];
+    if (!VALID_INVITE_ROLES.includes(role)) {
+      return res.status(400).json({ error: `Invalid role: ${role}` });
+    }
+    // Only a super_admin may grant admin/super_admin. Admins can invite staff only.
+    if (role !== 'staff' && actor.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Only a super admin can grant admin or super admin roles.' });
+    }
     let user = findUserByEmail(email);
     if (!user) {
       const tempPassword = crypto.randomUUID();
@@ -228,17 +237,21 @@ app.post('/api/functions/:name', async (req, res) => {
 });
 
 // ─── File upload (base64 JSON or raw) ──────────────────────────────────────────
-app.post('/api/upload', (req, res) => {
+// Admin uploads flow through the image pipeline: sharp compresses + resizes to
+// WebP derivatives and writes them to R2 (or local disk in dev). Returns the
+// canonical card URL as `file_url` (back-compat) plus the full descriptor
+// (`url`, `variants`, `base`, `optimized`) so callers can store the variants map.
+app.post('/api/upload', async (req, res) => {
   try {
     const user = getUserFromRequest(req);
-    if (!user) return res.status(401).json({ error: 'Not authenticated' });
+    if (!user || !['admin', 'super_admin', 'staff'].includes(user.role)) {
+      return res.status(user ? 403 : 401).json({ error: user ? 'Forbidden' : 'Not authenticated' });
+    }
     const { filename, content_base64 } = req.body || {};
     if (!content_base64) return res.status(400).json({ error: 'content_base64 required' });
-    const base = (filename || 'upload').replace(/[^a-zA-Z0-9._-]/g, '_');
-    const name = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}-${base}`;
-    const data = content_base64.includes(',') ? content_base64.split(',')[1] : content_base64;
-    fs.writeFileSync(path.join(UPLOAD_DIR, name), Buffer.from(data, 'base64'));
-    res.json({ file_url: `/uploads/${name}` });
+    const buffer = bufferFromBase64(content_base64);
+    const descriptor = await optimizeAndStore(buffer, filename || 'upload');
+    res.json({ file_url: descriptor.url, ...descriptor });
   } catch (e) { handleError(res, e); }
 });
 
@@ -312,16 +325,28 @@ app.get('/api/entities/:entity/:id', ensureEntity, (req, res) => {
   } catch (e) { handleError(res, e); }
 });
 
+// Role is privileged: it can only be set via the super-admin-guarded
+// setUserRole function / invite endpoint, never through generic User writes.
+function stripPrivilegedUserFields(entity, body) {
+  if (entity === 'User' && body && 'role' in body) {
+    const { role, ...rest } = body;
+    return rest;
+  }
+  return body || {};
+}
+
 app.post('/api/entities/:entity', ensureEntity, authorizeWrite('create'), (req, res) => {
   try {
-    const record = createRecord(req.params.entity, req.body || {});
+    const body = stripPrivilegedUserFields(req.params.entity, req.body);
+    const record = createRecord(req.params.entity, body);
     res.json(sanitize(req.params.entity, record));
   } catch (e) { handleError(res, e); }
 });
 
 app.put('/api/entities/:entity/:id', ensureEntity, authorizeWrite('update'), (req, res) => {
   try {
-    const record = updateRecord(req.params.entity, req.params.id, req.body || {});
+    const body = stripPrivilegedUserFields(req.params.entity, req.body);
+    const record = updateRecord(req.params.entity, req.params.id, body);
     res.json(sanitize(req.params.entity, record));
   } catch (e) { handleError(res, e); }
 });

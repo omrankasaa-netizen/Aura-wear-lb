@@ -4,33 +4,34 @@ import { useAuthUser } from '@/contexts/AuthUserContext';
 import { useLang } from '@/contexts/LanguageContext';
 import {
   LayoutDashboard, Package, ShoppingBag, BarChart2, Tag, Settings,
-  Users, FileText, LogOut, Menu, X, ChevronRight,
+  Users, FileText, LogOut, Menu, X, ChevronRight, ChevronDown,
   Warehouse, Languages, ExternalLink, Upload, Percent, Megaphone, FolderTree, User, Crown, Mail, Truck,
 } from 'lucide-react';
 
+// Primary navigation (operational, day-to-day).
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin', permission: null },
   { label: 'Products',  icon: Package,         path: '/admin/products',    permission: 'view_products' },
   { label: 'Categories',icon: FolderTree,      path: '/admin/categories',  permission: 'manage_cms' },
   { label: 'Customers', icon: User,            path: '/admin/customers',   permission: 'view_orders' },
   { label: 'Orders',    icon: ShoppingBag,     path: '/admin/orders',      permission: 'view_orders' },
-  { label: 'Membership',icon: Crown,           path: '/admin/membership',  permission: 'manage_settings' },
-  { label: 'Email Log', icon: FileText,       path: '/admin/email-log',   permission: 'manage_settings' },
   { label: 'Inventory', icon: Warehouse,       path: '/admin/inventory',   permission: 'manage_inventory' },
+  { label: 'Membership',icon: Crown,           path: '/admin/membership',  permission: 'manage_settings' },
   { label: 'Finances',  icon: BarChart2,       path: '/admin/finances',    permission: 'view_finances' },
-
   { label: 'Promo Codes', icon: Tag,           path: '/admin/promo-codes',  permission: 'manage_discounts' },
   { label: 'Discounts',   icon: Percent,       path: '/admin/discounts',    permission: 'manage_discounts' },
   { label: 'Campaigns',   icon: Megaphone,     path: '/admin/campaigns',    permission: 'manage_discounts' },
-  { label: 'Bulk Upload', icon: Upload,        path: '/admin/bulk-upload',  permission: 'edit_products' },
-  { label: 'CMS',         icon: FileText,      path: '/admin/cms',          permission: 'manage_cms' },
+  { label: 'Bulk Import', icon: Upload,        path: '/admin/bulk-upload',  permission: 'edit_products' },
   { label: 'Team',        icon: Users,         path: '/admin/team',         permission: 'manage_team' },
-  { label: 'Audit Log',   icon: FileText,      path: '/admin/audit',        permission: 'view_audit_log'  },
-  { label: 'Email Log',   icon: Mail,          path: '/admin/email-log',    permission: 'manage_settings' },
+];
 
-  { label: 'Settings',    icon: Settings,      path: '/admin/site-settings',permission: 'manage_settings' },
-  { label: 'Shipping',    icon: Truck,         path: '/admin/site-settings/shipping', permission: 'manage_settings' },
-  { label: 'Launch',      icon: ExternalLink,  path: '/admin/launch',       permission: 'manage_settings' },
+// Configuration — grouped under a collapsible "Settings" section.
+const settingsNav = [
+  { label: 'Site Settings', icon: Settings, path: '/admin/site-settings',          permission: 'manage_settings' },
+  { label: 'CMS',           icon: FileText, path: '/admin/cms',                     permission: 'manage_cms' },
+  { label: 'Shipping',      icon: Truck,    path: '/admin/site-settings/shipping',  permission: 'manage_settings' },
+  { label: 'Email Log',     icon: Mail,     path: '/admin/email-log',               permission: 'manage_settings' },
+  { label: 'Audit Log',     icon: FileText, path: '/admin/audit',                   permission: 'view_audit_log' },
 ];
 
 const roleLabel = { super_admin: 'Super Admin', admin: 'Admin', staff: 'Staff' };
@@ -44,6 +45,9 @@ export default function AdminLayout({ children }) {
   const visibleNav = navItems.filter(item =>
     item.permission === null || canAccess(item.permission)
   );
+  const visibleSettings = settingsNav.filter(item => canAccess(item.permission));
+  const inSettings = visibleSettings.some(item => location.pathname === item.path);
+  const [settingsOpen, setSettingsOpen] = useState(inSettings);
 
   const initials = currentUser?.full_name
     ? currentUser.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
@@ -82,6 +86,40 @@ export default function AdminLayout({ children }) {
               </Link>
             );
           })}
+
+          {/* Collapsible Settings group */}
+          {visibleSettings.length > 0 && (
+            <div className="pt-2">
+              <button
+                onClick={() => setSettingsOpen(o => !o)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-foreground hover:bg-muted transition-colors"
+              >
+                <Settings className="w-4 h-4 shrink-0" />
+                <span className="flex-1 text-left">Settings</span>
+                <ChevronDown className={`w-3.5 h-3.5 opacity-60 transition-transform ${settingsOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {settingsOpen && (
+                <div className="mt-0.5 ml-3 pl-3 border-l border-border space-y-0.5">
+                  {visibleSettings.map(item => {
+                    const active = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        onClick={() => setSidebarOpen(false)}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+                          active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-muted'
+                        }`}
+                      >
+                        <item.icon className="w-4 h-4 shrink-0" />
+                        <span className="flex-1">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </nav>
 
         {/* User footer */}
