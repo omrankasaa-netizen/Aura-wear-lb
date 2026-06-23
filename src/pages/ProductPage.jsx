@@ -9,6 +9,7 @@ import { ShoppingBag, ChevronLeft, ChevronRight, Truck, ShieldCheck, MessageCirc
 import WishlistHeart from '@/components/storefront/WishlistHeart';
 import { ReviewList, ReviewForm } from '@/components/storefront/ReviewCard';
 import { BRAND, whatsappLink } from '@/lib/brand';
+import { imageSrc, handleImageError } from '@/lib/imageFraming';
 
 const COLOR_HEX = {
   White: '#FFFFFF', Black: '#111111', Beige: '#E9E3DA', Cream: '#FAF8F4',
@@ -132,7 +133,7 @@ export default function ProductPage() {
           <div className="space-y-3">
             <div className="relative aspect-[4/5] bg-secondary rounded-sm overflow-hidden">
               {displayImages.length > 0 ? (
-                <img src={displayImages[imgIdx]?.url} alt={name} className="w-full h-full object-cover" />
+                <img src={imageSrc(displayImages[imgIdx], 'large')} alt={name} loading="eager" decoding="async" onError={handleImageError} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <img src="/brand/aura-mark.png" alt="" className="w-16 h-16 opacity-20" />
@@ -160,7 +161,7 @@ export default function ProductPage() {
                 {displayImages.map((img, i) => (
                   <button key={i} onClick={() => setImgIdx(i)}
                     className={`w-16 h-20 rounded-sm overflow-hidden shrink-0 border transition-colors ${i === imgIdx ? 'border-foreground' : 'border-transparent hover:border-border'}`}>
-                    <img src={img.url} alt="" className="w-full h-full object-cover" />
+                    <img src={imageSrc(img, 'thumb')} alt="" loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full object-cover" />
                   </button>
                 ))}
               </div>

@@ -55,7 +55,6 @@ import FinancesPage from '@/pages/admin/FinancesPage';
 import BulkUploadPage from '@/pages/admin/BulkUploadPage';
 import CmsPage from '@/pages/admin/CmsPage';
 import SiteSettingsPage from '@/pages/admin/SiteSettingsPage';
-import LaunchChecklist from '@/pages/admin/LaunchChecklist';
 import PromoCodesPage from '@/pages/admin/PromoCodesPage';
 import DiscountsPage from '@/pages/admin/DiscountsPage';
 import CampaignsPage from '@/pages/admin/CampaignsPage';
@@ -135,7 +134,6 @@ const AuthenticatedApp = () => {
       <Route path="/admin/bulk-upload" element={<AdminGuard><BulkUploadPage /></AdminGuard>} />
       <Route path="/admin/cms" element={<AdminGuard><CmsPage /></AdminGuard>} />
       <Route path="/admin/site-settings" element={<AdminGuard><SiteSettingsPage /></AdminGuard>} />
-      <Route path="/admin/launch" element={<AdminGuard><LaunchChecklist /></AdminGuard>} />
       <Route path="/admin/promo-codes" element={<AdminGuard><PromoCodesPage /></AdminGuard>} />
       <Route path="/admin/discounts" element={<AdminGuard><DiscountsPage /></AdminGuard>} />
       <Route path="/admin/campaigns" element={<AdminGuard><CampaignsPage /></AdminGuard>} />

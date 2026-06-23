@@ -606,6 +606,64 @@ async function onOrderDelivered(body, user) {
   return { ok: true, stock: stock_result, tier: tier_result, email: email_result };
 }
 
+// ─── RBAC: role hierarchy + user administration ─────────────────────────────
+// super_admin > admin > staff > customer. Higher rank inherits lower powers.
+const ROLE_RANK = { customer: 0, staff: 1, admin: 2, super_admin: 3 };
+const VALID_ROLES = ['customer', 'staff', 'admin', 'super_admin'];
+function rankOf(role) { return ROLE_RANK[role] ?? -1; }
+
+function stripUser(u) {
+  if (!u) return u;
+  const { password_hash, otp_hash, ...rest } = u;
+  return rest;
+}
+
+// Super-admin-only: list all team/staff accounts (credentials stripped).
+async function listUsers(body, actor) {
+  const all = queryRecords('User', { sort: '-created_date', limit: 1000 });
+  return { users: all.map(stripUser) };
+}
+
+// Super-admin-only: change a user's role. Server-side guard is the source of
+// truth — the UI gating is only cosmetic. Refuses to demote the last super
+// admin and refuses self-demotion, and records an AuditLog entry.
+async function setUserRole(body, actor) {
+  const { user_id, role } = body || {};
+  if (!user_id || !role) return { _status: 400, error: 'user_id and role are required' };
+  if (!VALID_ROLES.includes(role)) return { _status: 400, error: `Invalid role: ${role}` };
+
+  const target = getRecord('User', user_id);
+  if (!target) return { _status: 404, error: 'User not found' };
+
+  if (actor && target.id === actor.id) {
+    return { _status: 400, error: 'You cannot change your own role.' };
+  }
+
+  // Never let the last super admin be demoted — that would lock everyone out.
+  if (target.role === 'super_admin' && role !== 'super_admin') {
+    const superAdmins = queryRecords('User', { query: { role: 'super_admin' } });
+    if (superAdmins.length <= 1) {
+      return { _status: 400, error: 'Cannot demote the last super admin.' };
+    }
+  }
+
+  const prevRole = target.role;
+  const updated = updateRecord('User', user_id, { role });
+
+  try {
+    createRecord('AuditLog', {
+      action: 'role_changed',
+      entity: 'User',
+      entity_id: user_id,
+      user_name: actor?.full_name || actor?.email || 'system',
+      details: `${target.email}: ${prevRole} → ${role}`,
+      created_at: nowIso(),
+    });
+  } catch { /* audit is best-effort */ }
+
+  return { ok: true, user: stripUser(updated) };
+}
+
 const REGISTRY = {
   inventoryEngine,
   membershipEngine,
@@ -615,7 +673,42 @@ const REGISTRY = {
   sendOrderStatusUpdate,
   sendWelcomeEmailNew,
   onOrderDelivered,
+  listUsers,
+  setUserRole,
 };
+
+// Minimum role required to invoke each function.
+//   'public' — storefront/guest flows (checkout, registration).
+//   role name — that role or higher (by ROLE_RANK).
+// Anything NOT listed defaults to 'admin' (fail-safe: never expose a new
+// function to guests by forgetting to add it here).
+const FUNCTION_GUARDS = {
+  inventoryEngine: 'public',
+  membershipEngine: 'public',
+  sendWelcomeEmailNew: 'public',
+  sendOrderConfirmation: 'public',
+  sendOrderNotification: 'public',
+  sendOrderStatusUpdate: 'staff',
+  onOrderDelivered: 'staff',
+  seedShippingZones: 'admin',
+  listUsers: 'super_admin',
+  setUserRole: 'super_admin',
+};
+
+function authorizeFunction(name, user) {
+  const required = FUNCTION_GUARDS[name] ?? 'admin'; // fail-safe default
+  if (required === 'public') return;
+  if (!user) {
+    const err = new Error('Authentication required');
+    err.status = 401;
+    throw err;
+  }
+  if (rankOf(user.role) < rankOf(required)) {
+    const err = new Error('Forbidden: insufficient permissions');
+    err.status = 403;
+    throw err;
+  }
+}
 
 export async function invokeFunction(name, body, user) {
   const fn = REGISTRY[name];
@@ -624,5 +717,6 @@ export async function invokeFunction(name, body, user) {
     err.status = 404;
     throw err;
   }
+  authorizeFunction(name, user);
   return await fn(body || {}, user);
 }
