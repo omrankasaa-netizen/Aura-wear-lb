@@ -95,7 +95,8 @@ function Toggle({ label, checked, onChange }) {
 }
 
 export default function ProductForm({ product, categories, onClose, onSaved }) {
-  const { currentUser } = useAuthUser();
+  const { currentUser, hasRole } = useAuthUser();
+  const canSeeCost = hasRole('super_admin');
   const isNew = !product?.id;
   const fileInputRef = useRef();
 
@@ -214,6 +215,8 @@ export default function ProductForm({ product, categories, onClose, onSaved }) {
         cost_usd: form.cost_usd ? Number(form.cost_usd) : null,
         stock_quantity: form.has_variants ? 0 : Number(form.stock_quantity || 0),
       };
+      // Cost is super-admin-only money; never let a non-super write/overwrite it.
+      if (!canSeeCost) delete payload.cost_usd;
 
       let productId;
       if (isNew) {
@@ -365,9 +368,11 @@ export default function ProductForm({ product, categories, onClose, onSaved }) {
                 <Field label="Compare At (USD)">
                   <Input type="number" step="0.01" min="0" value={form.compare_at_price_usd || ''} onChange={e => set('compare_at_price_usd', e.target.value)} placeholder="0.00" />
                 </Field>
-                <Field label="Cost (USD)">
-                  <Input type="number" step="0.01" min="0" value={form.cost_usd || ''} onChange={e => set('cost_usd', e.target.value)} placeholder="0.00" />
-                </Field>
+                {canSeeCost && (
+                  <Field label="Cost (USD)">
+                    <Input type="number" step="0.01" min="0" value={form.cost_usd || ''} onChange={e => set('cost_usd', e.target.value)} placeholder="0.00" />
+                  </Field>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Tags (comma-separated)">
