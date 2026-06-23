@@ -5,6 +5,7 @@ import { useLang } from '@/contexts/LanguageContext';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { COLLECTIONS } from '@/lib/brand';
+import { cmsImageSrc, handleImageError } from '@/lib/imageFraming';
 
 export default function FeaturedCategories() {
   const { t, lang } = useLang();
@@ -36,7 +37,7 @@ export default function FeaturedCategories() {
             <motion.div key={c.slug} initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.05 }}>
               <Link to={`/shop?category=${c.slug}`} className="group relative block aspect-square overflow-hidden bg-secondary rounded-sm">
                 {c.image ? (
-                  <img src={c.image} alt={c.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <img src={cmsImageSrc(c.image, 'card')} alt={c.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <img src="/brand/aura-mark.png" alt="" className="w-10 h-10 opacity-15" />

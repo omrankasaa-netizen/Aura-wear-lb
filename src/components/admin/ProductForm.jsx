@@ -177,10 +177,11 @@ export default function ProductForm({ product, categories, onClose, onSaved }) {
   async function handleImageUpload(files) {
     setUploading(true);
     for (const file of files) {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const res = await base44.integrations.Core.UploadFile({ file });
+      const file_url = res.file_url || res.url;
       setImages(imgs => [
         ...imgs,
-        { url: file_url, is_primary: imgs.length === 0, sort_order: imgs.length, isNew: true }
+        { url: file_url, variants: res.variants || null, is_primary: imgs.length === 0, sort_order: imgs.length, isNew: true }
       ]);
     }
     setUploading(false);
@@ -248,7 +249,7 @@ export default function ProductForm({ product, categories, onClose, onSaved }) {
       // Save images
       for (let i = 0; i < images.length; i++) {
         const img = images[i];
-        const imgPayload = { product_id: productId, url: img.url, is_primary: img.is_primary, sort_order: i, alt: form.name, alt_ar: form.name_ar, focal: img.focal ?? null, crop: img.crop ?? null };
+        const imgPayload = { product_id: productId, url: img.url, variants: img.variants ?? null, is_primary: img.is_primary, sort_order: i, alt: form.name, alt_ar: form.name_ar, focal: img.focal ?? null, crop: img.crop ?? null };
         if (img.id && !img.isNew) {
           await base44.entities.ProductImage.update(img.id, imgPayload);
         } else if (img.isNew || !img.id) {
