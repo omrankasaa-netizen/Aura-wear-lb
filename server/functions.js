@@ -1,5 +1,6 @@
 import { createRecord, getRecord, updateRecord, queryRecords, bulkCreate, nowIso } from './db.js';
 import { sendEmail } from './email.js';
+import { ADMIN_TOOLS, ADMIN_TOOL_GUARDS } from './adminTools.js';
 
 // ─── Brand / email constants ────────────────────────────────────────────────
 // Public site base used for links inside automated emails.
@@ -675,6 +676,7 @@ const REGISTRY = {
   onOrderDelivered,
   listUsers,
   setUserRole,
+  ...ADMIN_TOOLS,
 };
 
 // Minimum role required to invoke each function.
@@ -693,6 +695,7 @@ const FUNCTION_GUARDS = {
   seedShippingZones: 'admin',
   listUsers: 'super_admin',
   setUserRole: 'super_admin',
+  ...ADMIN_TOOL_GUARDS,
 };
 
 function authorizeFunction(name, user) {

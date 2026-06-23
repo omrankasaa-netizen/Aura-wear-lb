@@ -6,8 +6,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { logAction } from '@/lib/auditLog';
 import AccessDenied from './AccessDenied';
 import ProductForm from '@/components/admin/ProductForm';
-import { Plus, Search, Filter, Pencil, Trash2, Eye, EyeOff, Star } from 'lucide-react';
+import { Plus, Search, Filter, Pencil, Trash2, Eye, EyeOff, Star, Download, Printer } from 'lucide-react';
 import { stockStatus } from '@/lib/inventory';
+import { exportViaFunction, printTable } from '@/lib/adminExport';
 
 const STATUS_COLORS = { Active: 'bg-green-50 text-green-700', Hidden: 'bg-muted text-muted-foreground' };
 
@@ -123,6 +124,25 @@ export default function ProductsPage() {
 
   const catMap = Object.fromEntries(categories.map(c => [c.id, c.name]));
 
+  const [exporting, setExporting] = useState(false);
+  async function handleExport() {
+    setExporting(true);
+    try { await exportViaFunction(base44, 'exportProductsCsv', {}); }
+    finally { setExporting(false); }
+  }
+  function handlePrint() {
+    const headers = ['Name', 'SKU', 'Category', 'Price', 'Stock', 'Status'];
+    const rows = filtered.map(p => [
+      p.name,
+      p.sku || '',
+      catMap[p.category_id] || '',
+      p.price_usd != null ? `$${p.price_usd.toFixed(2)}` : '',
+      getQty(p, variantsByProduct[p.id] || []),
+      p.status || '',
+    ]);
+    printTable('Products', headers, rows);
+  }
+
   if (!canAccess('view_products')) return <AdminLayout><AccessDenied /></AdminLayout>;
 
   return (
@@ -134,14 +154,24 @@ export default function ProductsPage() {
             <h1 className="text-2xl font-heading font-bold text-foreground">Products</h1>
             <p className="text-sm text-muted-foreground">{products.length} total</p>
           </div>
-          {canAccess('edit_products') && (
-            <button
-              onClick={() => { setEditProduct({}); setShowForm(true); }}
-              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="w-4 h-4" /> Add Product
+          <div className="flex items-center gap-2">
+            <button onClick={handleExport} disabled={exporting}
+              className="flex items-center gap-2 border border-border bg-card text-foreground px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-muted transition-colors disabled:opacity-50">
+              <Download className="w-4 h-4" /> {exporting ? 'Exporting…' : 'Export CSV'}
             </button>
-          )}
+            <button onClick={handlePrint}
+              className="flex items-center gap-2 border border-border bg-card text-foreground px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-muted transition-colors">
+              <Printer className="w-4 h-4" /> Print
+            </button>
+            {canAccess('edit_products') && (
+              <button
+                onClick={() => { setEditProduct({}); setShowForm(true); }}
+                className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-primary/90 transition-colors"
+              >
+                <Plus className="w-4 h-4" /> Add Product
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Filters */}

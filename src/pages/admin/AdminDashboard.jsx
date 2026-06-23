@@ -4,9 +4,7 @@ import AdminLayout from '@/components/admin/AdminLayout';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { Package, ShoppingBag, TrendingUp, AlertTriangle, XCircle, BarChart2, ArrowRight, Tag, Percent, Megaphone } from 'lucide-react';
-import { stockStatus } from '@/lib/inventory';
-import { isDiscountLive, isCampaignLive } from '@/lib/discounts';
+import { Package, ShoppingBag, TrendingUp, AlertTriangle, XCircle, BarChart2, ArrowRight, Users, Boxes } from 'lucide-react';
 
 const STATUS_COLORS = {
   New:                'bg-blue-50 text-blue-700',
@@ -36,106 +34,49 @@ function KpiCard({ icon: Icon, label, value, sub, color, loading }) {
   );
 }
 
+// Inline SVG sparkline — no chart dependency.
+function Sparkline({ data = [], color = 'hsl(var(--primary))' }) {
+  if (!data.length) return null;
+  const max = Math.max(...data, 1);
+  const w = 120, h = 32, step = data.length > 1 ? w / (data.length - 1) : w;
+  const pts = data.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * h).toFixed(1)}`).join(' ');
+  return (
+    <svg width={w} height={h} className="overflow-visible">
+      <polyline fill="none" stroke={color} strokeWidth="2" points={pts} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function AdminDashboard() {
-  const { currentUser, canAccess } = useAuthUser();
+  const { currentUser } = useAuthUser();
   const navigate = useNavigate();
 
-  const { data: orders = [], isLoading: loadingOrders } = useQuery({
-    queryKey: ['dash-orders'],
-    queryFn: () => base44.entities.Order.list('-created_date', 500),
+  // Single server-computed snapshot. Money fields are stripped server-side for
+  // non-super-admins, so the browser never receives them. Live refetch keeps the
+  // numbers current (the prior client-computed dashboard went stale).
+  const { data, isLoading } = useQuery({
+    queryKey: ['dashboard-snapshot'],
+    queryFn: async () => {
+      const res = await base44.functions.invoke('getDashboard', {});
+      return res?.data || res;
+    },
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchInterval: 60 * 1000,
   });
 
-  const { data: products = [], isLoading: loadingProducts } = useQuery({
-    queryKey: ['dash-products'],
-    queryFn: () => base44.entities.Product.list('-created_date', 500),
-  });
-
-  const { data: variants = [] } = useQuery({
-    queryKey: ['dash-variants'],
-    queryFn: () => base44.entities.ProductVariant.list('-created_date', 1000),
-  });
-
-  const { data: promoCodes = [] } = useQuery({
-    queryKey: ['dash-promo-codes'],
-    queryFn: () => base44.entities.PromoCode.filter({ is_active: true }, '-created_date', 20),
-  });
-
-  const { data: discounts = [] } = useQuery({
-    queryKey: ['dash-discounts'],
-    queryFn: () => base44.entities.Discount.filter({ is_active: true }, '-created_date', 20),
-  });
-
-  const { data: campaigns = [] } = useQuery({
-    queryKey: ['dash-campaigns'],
-    queryFn: () => base44.entities.Campaign.filter({ is_active: true }, '-starts_at', 20),
-  });
-
-  // ── KPI calculations ─────────────────────────────────────────────────────────
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-  const ordersThisMonth = orders.filter(o => new Date(o.order_date || o.created_date) >= monthStart);
-  const revenueOrders = ordersThisMonth.filter(o => ['Confirmed', 'Packed', 'Out for Delivery', 'Delivered'].includes(o.order_status));
-  const revenueThisMonth = revenueOrders.reduce((s, o) => s + (o.grand_total_usd || 0), 0);
-
-  const deliveryFees = revenueOrders.reduce((s, o) => s + (o.delivery_fee_usd || 0), 0);
-  const productsWithCost = products.filter(p => p.cost_usd > 0);
-  const costDataComplete = productsWithCost.length === products.length;
-  const avgCostRatio = products.length > 0 && productsWithCost.length > 0
-    ? productsWithCost.reduce((s, p) => s + (p.cost_usd / Math.max(p.price_usd, 1)), 0) / productsWithCost.length
+  const c = data?.counts || {};
+  const showMoney = !!data?.show_money;
+  const money = data?.money || {};
+  const trend = data?.trend || {};
+  const trendPct = trend.ordersPrev7d > 0
+    ? Math.round(((trend.orders7d - trend.ordersPrev7d) / trend.ordersPrev7d) * 100)
     : null;
-  const estProfit = avgCostRatio !== null
-    ? revenueThisMonth - deliveryFees - (revenueThisMonth * avgCostRatio)
-    : null;
-
-  const variantsByProduct = {};
-  for (const v of variants) {
-    if (!variantsByProduct[v.product_id]) variantsByProduct[v.product_id] = [];
-    variantsByProduct[v.product_id].push(v);
-  }
-
-  let totalStock = 0, lowStockCount = 0, outOfStockCount = 0;
-  for (const p of products) {
-    const pvs = variantsByProduct[p.id] || [];
-    if (p.has_variants && pvs.length > 0) {
-      for (const v of pvs) {
-        const q = v.qty_on_hand || 0;
-        totalStock += q;
-        if (q <= 0) outOfStockCount++;
-        else if (q <= (p.reorder_level || 3)) lowStockCount++;
-      }
-    } else {
-      const q = p.stock_quantity || 0;
-      totalStock += q;
-      if (q <= 0) outOfStockCount++;
-      else if (q <= (p.reorder_level || 3)) lowStockCount++;
-    }
-  }
-
-  const lowStockProducts = products.filter(p => {
-    const pvs = variantsByProduct[p.id] || [];
-    if (p.has_variants && pvs.length > 0) return pvs.some(v => (v.qty_on_hand || 0) <= (p.reorder_level || 3));
-    return (p.stock_quantity || 0) <= (p.reorder_level || 3);
-  }).slice(0, 6);
-
-  const recentOrders = [...orders].sort((a, b) => new Date(b.created_date) - new Date(a.created_date)).slice(0, 10);
-
-  // Active promotions
-  const activePromoCodes = promoCodes.filter(c => {
-    if (!c.is_active) return false;
-    if (c.valid_from && new Date(c.valid_from) > now) return false;
-    if (c.valid_until && new Date(c.valid_until) < now) return false;
-    if (c.usage_limit && c.times_used >= c.usage_limit) return false;
-    return true;
-  });
-  const liveDiscounts = discounts.filter(isDiscountLive);
-  const liveCampaigns = campaigns.filter(isCampaignLive);
-  const hasActivePromos = activePromoCodes.length > 0 || liveDiscounts.length > 0 || liveCampaigns.length > 0;
 
   return (
     <AdminLayout>
       <div className="p-5 lg:p-8 max-w-7xl mx-auto space-y-8">
-        {/* Header */}
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground">
             Welcome back{currentUser?.full_name ? `, ${currentUser.full_name.split(' ')[0]}` : ''} 👋
@@ -145,66 +86,37 @@ export default function AdminDashboard() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-          <KpiCard icon={Package}       label="Total Products"       value={products.length}                          color="bg-primary/10 text-primary"                loading={loadingProducts} />
-          <KpiCard icon={Package}       label="Items in Stock"        value={totalStock}                               color="bg-secondary/20 text-secondary"            loading={loadingProducts} />
-          <KpiCard icon={AlertTriangle} label="Low Stock"             value={lowStockCount}                            color="bg-amber-50 text-amber-600"                loading={loadingProducts} />
-          <KpiCard icon={XCircle}       label="Out of Stock"          value={outOfStockCount}                          color="bg-destructive/10 text-destructive"         loading={loadingProducts} />
-          <KpiCard icon={ShoppingBag}   label="Orders This Month"     value={ordersThisMonth.length}                   color="bg-blue-50 text-blue-600"                  loading={loadingOrders} />
-          {canAccess('view_finances') && (
+          <KpiCard icon={Package}       label="Total Products"    value={c.totalProducts}     color="bg-primary/10 text-primary"          loading={isLoading} />
+          <KpiCard icon={Boxes}         label="Items in Stock"    value={c.itemsInStock}      color="bg-secondary/20 text-secondary"      loading={isLoading} />
+          <KpiCard icon={AlertTriangle} label="Low Stock"         value={c.lowStockCount}     color="bg-amber-50 text-amber-600"          loading={isLoading} />
+          <KpiCard icon={XCircle}       label="Out of Stock"      value={c.outOfStockCount}   color="bg-destructive/10 text-destructive"  loading={isLoading} />
+          <KpiCard icon={ShoppingBag}   label="Orders Today"      value={c.ordersToday}       color="bg-blue-50 text-blue-600"            loading={isLoading} />
+          <KpiCard icon={ShoppingBag}   label="Orders (30d)"      value={c.orders30d}         sub={trendPct != null ? `${trendPct >= 0 ? '▲' : '▼'} ${Math.abs(trendPct)}% vs prev 7d` : undefined} color="bg-indigo-50 text-indigo-600" loading={isLoading} />
+          <KpiCard icon={Package}       label="Open Orders"       value={c.openOrders}        color="bg-violet-50 text-violet-600"        loading={isLoading} />
+          <KpiCard icon={Users}         label="Customers"         value={c.totalCustomers}    color="bg-teal-50 text-teal-600"            loading={isLoading} />
+          {showMoney && (
             <>
-              <KpiCard icon={TrendingUp}  label="Revenue This Month"    value={`$${revenueThisMonth.toFixed(2)}`}        color="bg-green-50 text-green-700"                loading={loadingOrders} />
-              <KpiCard
-                icon={BarChart2}
-                label="Est. Gross Profit"
-                value={estProfit !== null ? `$${estProfit.toFixed(2)}` : '—'}
-                sub={!costDataComplete ? `Note: ${products.length - productsWithCost.length} products missing cost_usd` : undefined}
-                color="bg-violet-50 text-violet-700"
-                loading={loadingOrders || loadingProducts}
-              />
+              <KpiCard icon={TrendingUp} label="Revenue This Month" value={`$${(money.revenueThisMonth || 0).toFixed(2)}`} color="bg-green-50 text-green-700" loading={isLoading} />
+              <KpiCard icon={BarChart2}  label="Avg Order Value"    value={`$${(money.aov || 0).toFixed(2)}`}              color="bg-emerald-50 text-emerald-700" loading={isLoading} />
+              <KpiCard icon={TrendingUp} label="Revenue (7d)"       value={`$${(money.revenue7d || 0).toFixed(2)}`}        color="bg-green-50 text-green-700" loading={isLoading} />
+              <KpiCard icon={TrendingUp} label="Revenue (30d)"      value={`$${(money.revenue30d || 0).toFixed(2)}`}       color="bg-green-50 text-green-700" loading={isLoading} />
             </>
           )}
         </div>
 
-        {/* Active Promotions panel */}
-        {hasActivePromos && (
-          <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-border">
-              <h2 className="font-heading font-semibold text-foreground">🎉 Active Promotions</h2>
-            </div>
-            <div className="p-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {liveDiscounts.map(d => (
-                <Link key={d.id} to="/admin/discounts" className="flex items-start gap-2 bg-green-50 border border-green-100 rounded-xl p-3 hover:bg-green-100 transition-colors">
-                  <Percent className="w-4 h-4 text-green-700 mt-0.5 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-green-800 truncate">{d.name}</p>
-                    <p className="text-xs text-green-700">{d.type === 'percentage' ? `${d.value}% off` : `-$${d.value}`} · {d.applies_to?.replace(/_/g,' ')}</p>
-                    {d.ends_at && <p className="text-xs text-green-600">ends {new Date(d.ends_at).toLocaleDateString()}</p>}
-                  </div>
-                </Link>
-              ))}
-              {activePromoCodes.map(c => (
-                <Link key={c.id} to="/admin/promo-codes" className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl p-3 hover:bg-blue-100 transition-colors">
-                  <Tag className="w-4 h-4 text-blue-700 mt-0.5 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-blue-800 font-mono">{c.code}</p>
-                    <p className="text-xs text-blue-700">{c.type === 'free_shipping' ? 'Free shipping' : c.type === 'percentage' ? `${c.value}%` : `-$${c.value}`}</p>
-                    <p className="text-xs text-blue-600">{c.times_used || 0}{c.usage_limit ? `/${c.usage_limit}` : ''} used</p>
-                  </div>
-                </Link>
-              ))}
-              {liveCampaigns.map(c => (
-                <Link key={c.id} to="/admin/campaigns" className="flex items-start gap-2 bg-violet-50 border border-violet-100 rounded-xl p-3 hover:bg-violet-100 transition-colors">
-                  <Megaphone className="w-4 h-4 text-violet-700 mt-0.5 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-violet-800 truncate">{c.name}</p>
-                    <p className="text-xs text-violet-700 capitalize">{c.placement?.replace(/_/g,' ')}</p>
-                    {c.ends_at && <p className="text-xs text-violet-600">ends {new Date(c.ends_at).toLocaleDateString()}</p>}
-                  </div>
-                </Link>
-              ))}
-            </div>
+        {/* Sparklines */}
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
+            <p className="text-sm text-muted-foreground mb-2">Orders — last 7 days</p>
+            <Sparkline data={data?.spark?.orders || []} color="hsl(var(--primary))" />
           </div>
-        )}
+          {showMoney && (
+            <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
+              <p className="text-sm text-muted-foreground mb-2">Revenue — last 7 days</p>
+              <Sparkline data={data?.spark?.revenue || []} color="#16a34a" />
+            </div>
+          )}
+        </div>
 
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Recent Orders */}
@@ -216,10 +128,10 @@ export default function AdminDashboard() {
               </Link>
             </div>
             <div className="divide-y divide-border">
-              {recentOrders.length === 0 && (
+              {(data?.recentOrders || []).length === 0 && (
                 <p className="px-5 py-6 text-sm text-muted-foreground text-center">No orders yet.</p>
               )}
-              {recentOrders.map(order => (
+              {(data?.recentOrders || []).map(order => (
                 <div key={order.id} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">
@@ -228,7 +140,7 @@ export default function AdminDashboard() {
                     <p className="text-xs text-muted-foreground">{order.customer_name}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-semibold text-foreground">${(order.grand_total_usd || 0).toFixed(2)}</p>
+                    {showMoney && <p className="text-sm font-semibold text-foreground">${(order.grand_total_usd || 0).toFixed(2)}</p>}
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[order.order_status] || 'bg-muted text-muted-foreground'}`}>
                       {order.order_status}
                     </span>
@@ -247,31 +159,24 @@ export default function AdminDashboard() {
               </Link>
             </div>
             <div className="divide-y divide-border">
-              {lowStockProducts.length === 0 && (
+              {(data?.lowStockList || []).length === 0 && (
                 <p className="px-5 py-6 text-sm text-muted-foreground text-center">All products are well stocked ✓</p>
               )}
-              {lowStockProducts.map(p => {
-                const pvs = variantsByProduct[p.id] || [];
-                const qty = (p.has_variants && pvs.length > 0)
-                  ? pvs.reduce((s, v) => s + (v.qty_on_hand || 0), 0)
-                  : (p.stock_quantity || 0);
-                const st = stockStatus(qty, p.reorder_level);
-                return (
-                  <div key={p.id} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
-                      <p className="text-xs text-muted-foreground">{p.sku}</p>
-                    </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.color} shrink-0`}>{qty} left</span>
-                    <button
-                      onClick={() => navigate('/admin/inventory')}
-                      className="text-xs text-primary font-medium hover:underline shrink-0"
-                    >
-                      Restock
-                    </button>
+              {(data?.lowStockList || []).map(p => (
+                <div key={p.id} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/30 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
+                    <p className="text-xs text-muted-foreground">{p.sku}</p>
                   </div>
-                );
-              })}
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${p.qty <= 0 ? 'bg-destructive/10 text-destructive' : 'bg-amber-50 text-amber-700'}`}>{p.qty} left</span>
+                  <button
+                    onClick={() => navigate('/admin/inventory')}
+                    className="text-xs text-primary font-medium hover:underline shrink-0"
+                  >
+                    Restock
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         </div>
