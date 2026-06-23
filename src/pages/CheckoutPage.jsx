@@ -288,39 +288,18 @@ export default function CheckoutPage() {
     try {
       let guestCustomerId = currentUser?.id || '';
       if (!currentUser && createAccount) {
+        // Generic Customer reads are auth-gated, so we can no longer check for an
+        // existing account from the client. Delegate find-or-create to a
+        // server-trusted, idempotent upsert that also seeds Bronze membership +
+        // welcome email on first creation. The response is account-enumeration
+        // safe (identical whether the email pre-existed), so no PII leaks back.
         try {
-          const existingCustomers = await base44.entities.Customer.filter(
-            { email: form.customer_email },
-            'email',
-            1
-          );
-
-          if (existingCustomers.length === 0) {
-            const newCustomer = await base44.entities.Customer.create({
-              email: form.customer_email,
-              name: form.customer_name,
-              phone: form.customer_phone,
-              current_tier: 'Bronze',
-              lifetime_spend_usd: 0,
-              free_delivery_credits_remaining: 0
-            });
-            guestCustomerId = newCustomer.id;
-
-            await base44.functions.invoke('membershipEngine', {
-              action: 'grant_bronze_credits',
-              customer_id: newCustomer.id
-            });
-
-            try {
-              await base44.functions.invoke('sendWelcomeEmailNew', {
-                customer_id: newCustomer.id,
-                email: form.customer_email,
-                name: form.customer_name
-              });
-            } catch (err) {
-              console.error('Welcome email failed:', err);
-            }
-          }
+          const res = await base44.functions.invoke('upsertCustomerForOrder', {
+            email: form.customer_email,
+            name: form.customer_name,
+            phone: form.customer_phone
+          });
+          if (res?.data?.customer_id) guestCustomerId = res.data.customer_id;
         } catch (err) {
           console.error('Account creation failed:', err);
         }

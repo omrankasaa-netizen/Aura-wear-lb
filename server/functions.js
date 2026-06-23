@@ -665,9 +665,60 @@ async function setUserRole(body, actor) {
   return { ok: true, user: stripUser(updated) };
 }
 
+// ─── Guest checkout: find-or-create customer ────────────────────────────────
+// Public, server-trusted replacement for the storefront's old anonymous
+// `Customer.filter({email})` existence check (removed when generic Customer
+// reads were auth-gated). Idempotent: matches an existing Customer by
+// normalized (trimmed, lowercased) email and reuses it; otherwise creates one
+// and seeds Bronze membership + a welcome email. Re-running for the same email
+// always yields exactly one Customer.
+//
+// Account-enumeration safe: the response is identical — `{ ok: true,
+// customer_id }` — whether the email pre-existed or was just created, so an
+// anonymous caller cannot tell registered emails apart from new ones. It never
+// returns any other Customer PII.
+async function upsertCustomerForOrder(body) {
+  const email = String(body?.email || '').trim().toLowerCase();
+  if (!email) return { _status: 400, error: 'email required' };
+  const name = body?.name != null ? String(body.name).slice(0, 200) : '';
+  const phone = body?.phone != null ? String(body.phone).slice(0, 60) : '';
+
+  // Case-insensitive match across stored emails (older records may be mixed case).
+  const existing = queryRecords('Customer', { sort: 'created_date', limit: 100000 })
+    .find((c) => String(c.email || '').trim().toLowerCase() === email);
+
+  if (existing) {
+    // Backfill only missing contact fields; never overwrite what the customer
+    // already has on file.
+    const patch = {};
+    if (name && !existing.name) patch.name = name;
+    if (phone && !existing.phone) patch.phone = phone;
+    if (Object.keys(patch).length > 0) updateRecord('Customer', existing.id, patch);
+    return { ok: true, customer_id: existing.id };
+  }
+
+  const created = createRecord('Customer', {
+    email,
+    name,
+    phone,
+    current_tier: 'Bronze',
+    lifetime_spend_usd: 0,
+    free_delivery_credits_remaining: 0,
+  });
+
+  // Seed Bronze credits + welcome email (best-effort, never blocks checkout).
+  try { membershipEngine({ action: 'grant_bronze_credits', customer_id: created.id }); }
+  catch { /* non-blocking */ }
+  try { await sendWelcomeEmailNew({ customer_id: created.id, email, name }); }
+  catch { /* non-blocking */ }
+
+  return { ok: true, customer_id: created.id };
+}
+
 const REGISTRY = {
   inventoryEngine,
   membershipEngine,
+  upsertCustomerForOrder,
   seedShippingZones,
   sendOrderConfirmation,
   sendOrderNotification,
@@ -687,6 +738,7 @@ const REGISTRY = {
 const FUNCTION_GUARDS = {
   inventoryEngine: 'public',
   membershipEngine: 'public',
+  upsertCustomerForOrder: 'public',
   sendWelcomeEmailNew: 'public',
   sendOrderConfirmation: 'public',
   sendOrderNotification: 'public',
