@@ -718,6 +718,94 @@ export function shapeEntityReadsForRole(entity, records, user, query) {
   return single ? shaped[0] : shaped;
 }
 
+// ─── Generic entity READ authorization (anti-PII-leak) ──────────────────────
+// The generic read surface is otherwise unauthenticated, so any anonymous
+// client could LIST/GET full Order and Customer records — leaking customer PII
+// (name, phone, address, email) and order details. These sets + the authorizer
+// below gate the private/admin entities while keeping the public storefront
+// catalog open and preserving guest/customer self-service.
+//
+// Anything NOT listed in either set stays publicly readable (Product, Category,
+// CmsSection, Faq, Review, PromoCode, ShippingZone, … — the storefront needs
+// these unauthenticated).
+const ADMIN_ONLY_READ_ENTITIES = new Set([
+  'User', 'EmailLog', 'AuditLog', 'Purchase', 'Overhead',
+  'InventoryMovement', 'FreeDeliveryCredit',
+]);
+
+// PII/ownership entities: admin-tier sees all; a non-admin may only reach their
+// OWN records or use an unguessable self-service token (order_number / order_id).
+const PRIVATE_READ_ENTITIES = new Set([
+  'Order', 'OrderItem', 'Customer', 'CustomerAddress',
+  'OrderStatusHistory', 'MembershipHistory', 'WishlistItem',
+]);
+
+function isAdminTier(user) { return (ROLE_RANK[user?.role] ?? -1) >= ROLE_RANK.staff; }
+function hasKey(q, k) { return !!(q && Object.prototype.hasOwnProperty.call(q, k)); }
+function eqEmail(a, b) { return !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase(); }
+
+// Decide whether a generic entity read may proceed.
+//   entity  — the entity name
+//   user    — resolved requester (or null/undefined when anonymous)
+//   query   — parsed list filter ({} for GET-by-id)
+//   byId    — true for GET /:entity/:id (ownership re-checked after fetch)
+// Returns { allow:true } or { allow:false, status }. status is 401 when the
+// caller is anonymous (authenticate to proceed) and 403 when authenticated but
+// not permitted.
+export function authorizeEntityRead(entity, user, query, byId = false) {
+  const deny = () => ({ allow: false, status: user ? 403 : 401 });
+
+  if (ADMIN_ONLY_READ_ENTITIES.has(entity)) {
+    return isAdminTier(user) ? { allow: true } : deny();
+  }
+  if (!PRIVATE_READ_ENTITIES.has(entity)) return { allow: true }; // public catalog
+  if (isAdminTier(user)) return { allow: true };                  // admin manage views
+
+  // Non-admin (anonymous or customer) from here on.
+  // GET-by-id has no query to scope on: anonymous is denied outright; an
+  // authenticated user is allowed through and the handler enforces ownership.
+  if (byId) return user ? { allow: true } : { allow: false, status: 401 };
+
+  switch (entity) {
+    case 'Order':
+      // Guest receipt by order_number, or own orders by email/id.
+      if (hasKey(query, 'order_number')) return { allow: true };
+      if (user && (eqEmail(query.customer_email, user.email) || query.customer_id === user.id)) {
+        return { allow: true };
+      }
+      return deny();
+    case 'OrderItem':
+    case 'OrderStatusHistory':
+      // Scoped by the parent order's unguessable id (receipt + own history).
+      return hasKey(query, 'order_id') ? { allow: true } : deny();
+    case 'Customer':
+      // Own record only: filter must pin the requester's own identity.
+      if (user && (eqEmail(query.email, user.email) || query.user_id === user.id || query.account_id === user.id)) {
+        return { allow: true };
+      }
+      return deny();
+    case 'CustomerAddress':
+      // Authenticated, scoped to a customer id (address book).
+      return user && hasKey(query, 'customer_id') ? { allow: true } : deny();
+    case 'MembershipHistory':
+    case 'WishlistItem':
+      return user ? { allow: true } : deny();
+    default:
+      return deny();
+  }
+}
+
+// Ownership check for a single private record fetched by id (GET /:entity/:id).
+// Admin-tier always passes; otherwise only the record's owner. Entities with no
+// natural per-record owner are admin-only by id.
+export function canReadRecordById(entity, record, user) {
+  if (isAdminTier(user)) return true;
+  if (!record) return true; // let the handler return its own 404
+  if (entity === 'Order') return ownsOrder(record, user);
+  if (entity === 'Customer') return ownsCustomer(record, user);
+  return false;
+}
+
 // Strip monetary fields from a generic entity WRITE payload for non-super
 // admins, so they cannot set OR (thanks to merge-update) wipe internal money.
 export function stripWriteMoneyForRole(entity, body, user) {

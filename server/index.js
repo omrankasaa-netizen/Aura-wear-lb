@@ -16,7 +16,10 @@ import {
   issueOtp, verifyOtp as verifyOtpCode,
 } from './auth.js';
 import { invokeFunction } from './functions.js';
-import { isCustomerBlocked, shapeEntityReadsForRole, stripWriteMoneyForRole } from './adminTools.js';
+import {
+  isCustomerBlocked, shapeEntityReadsForRole, stripWriteMoneyForRole,
+  authorizeEntityRead, canReadRecordById,
+} from './adminTools.js';
 import { sendEmail } from './email.js';
 import { runSeed } from './seed.js';
 import { optimizeAndStore, bufferFromBase64 } from './imageOptimize.js';
@@ -313,6 +316,14 @@ app.get('/api/entities/:entity', ensureEntity, (req, res) => {
   try {
     const user = getUserFromRequest(req);
     const { query, sort, limit } = parseListParams(req);
+    // Gate private/admin entities so anonymous clients cannot list customer PII
+    // or others' orders. Public catalog entities pass through.
+    const auth = authorizeEntityRead(req.params.entity, user, query, false);
+    if (!auth.allow) {
+      return res.status(auth.status).json({
+        error: auth.status === 401 ? 'Authentication required' : 'Forbidden',
+      });
+    }
     const records = queryRecords(req.params.entity, { query, sort, limit })
       .map((r) => sanitize(req.params.entity, r));
     // Strip monetary fields for non-super-admins (own/self-service orders kept).
@@ -323,8 +334,18 @@ app.get('/api/entities/:entity', ensureEntity, (req, res) => {
 app.get('/api/entities/:entity/:id', ensureEntity, (req, res) => {
   try {
     const user = getUserFromRequest(req);
+    const auth = authorizeEntityRead(req.params.entity, user, {}, true);
+    if (!auth.allow) {
+      return res.status(auth.status).json({
+        error: auth.status === 401 ? 'Authentication required' : 'Forbidden',
+      });
+    }
     const record = getRecord(req.params.entity, req.params.id);
     if (!record) return res.status(404).json({ error: 'Not found' });
+    // Non-admin readers may only fetch their own private record by id.
+    if (!canReadRecordById(req.params.entity, record, user)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     res.json(shapeEntityReadsForRole(req.params.entity, sanitize(req.params.entity, record), user));
   } catch (e) { handleError(res, e); }
 });
