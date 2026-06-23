@@ -8,7 +8,7 @@ import AccessDenied from './AccessDenied';
 import { BarChart2, Plus, Pencil, Trash2, X, Receipt, TrendingUp, Tag } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
-const TABS = ['Summary', 'Purchases', 'Overhead', 'Promo Codes'];
+const BASE_TABS = ['Summary', 'Purchases', 'Overhead', 'Promo Codes'];
 const PURCHASE_CATS = ['Stock', 'Shipping', 'Packaging', 'Marketing', 'Other'];
 const PIE_COLORS = ['#2F5D57', '#7FA99B', '#E8C7C4', '#f59e0b', '#6366f1'];
 const CHANNELS = ['Website', 'Instagram', 'Facebook', 'WhatsApp', 'Other'];
@@ -222,10 +222,114 @@ function PromoModal({ promo, onClose, onSaved, currentUser }) {
   );
 }
 
+// ── Projected Revenue tab (super-admin only) ────────────────────────────────────
+function ProjectedRevenueTab() {
+  const qc = useQueryClient();
+  const { data: fin, isLoading } = useQuery({
+    queryKey: ['fin-projected'],
+    queryFn: async () => { const r = await base44.functions.invoke('getFinancials', {}); return r?.data || r; },
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+
+  const [rows, setRows] = useState([]);
+  const [ratio, setRatio] = useState(0.6);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (fin?.config) {
+      setRows(fin.config.overheads || []);
+      setRatio(fin.config.default_cost_ratio ?? 0.6);
+    }
+  }, [fin]);
+
+  function setRow(i, k, v) { setRows(rs => rs.map((r, idx) => idx === i ? { ...r, [k]: v } : r)); }
+  function addRow() { setRows(rs => [...rs, { label: '', qty: 1, unit_price: 0 }]); }
+  function removeRow(i) { setRows(rs => rs.filter((_, idx) => idx !== i)); }
+
+  async function save() {
+    setSaving(true);
+    try {
+      await base44.functions.invoke('saveFinancialsConfig', {
+        default_cost_ratio: Number(ratio) || 0.6,
+        overheads: rows.map(r => ({ label: r.label, qty: Number(r.qty) || 0, unit_price: Number(r.unit_price) || 0 })),
+      });
+      await qc.invalidateQueries({ queryKey: ['fin-projected'] });
+      setSaved(true); setTimeout(() => setSaved(false), 2000);
+    } finally { setSaving(false); }
+  }
+
+  const liveOverhead = rows.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.unit_price) || 0), 0);
+  const pct = (n) => `${((n || 0) * 100).toFixed(1)}%`;
+  const usd = (n) => `$${(Number(n) || 0).toFixed(2)}`;
+
+  if (isLoading) return <p className="text-sm text-muted-foreground">Loading projected revenue…</p>;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Potential Revenue', value: usd(fin?.potentialRevenue), sub: 'Σ price × stock (active)', color: 'bg-green-50 text-green-700' },
+          { label: 'COGS', value: usd(fin?.cogs), sub: 'Σ cost × stock', color: 'bg-amber-50 text-amber-700' },
+          { label: 'Gross Profit', value: usd(fin?.grossProfit), sub: `Margin ${pct(fin?.grossMargin)}`, color: 'bg-primary/10 text-primary' },
+          { label: 'Net Projected Profit', value: usd(fin?.netProjectedProfit), sub: `Net margin ${pct(fin?.netMargin)}`, color: (fin?.netProjectedProfit ?? 0) >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-destructive/10 text-destructive' },
+        ].map(k => (
+          <div key={k.label} className="bg-card border border-border rounded-2xl p-5 shadow-sm">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${k.color}`}><TrendingUp className="w-4 h-4" /></div>
+            <p className="text-xs text-muted-foreground mb-1">{k.label}</p>
+            <p className="text-2xl font-heading font-bold text-foreground">{k.value}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{k.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4 max-w-2xl">
+        <div className="flex items-center justify-between">
+          <h3 className="font-heading font-semibold text-foreground">Overheads</h3>
+          <button onClick={addRow} className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-xl text-xs font-semibold">
+            <Plus className="w-3.5 h-3.5" /> Add Row
+          </button>
+        </div>
+        <div className="space-y-2">
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input value={r.label} onChange={e => setRow(i, 'label', e.target.value)} placeholder="Label"
+                className="flex-1 px-3 py-2 rounded-xl border border-input bg-background text-sm" />
+              <input type="number" min="0" value={r.qty} onChange={e => setRow(i, 'qty', e.target.value)} title="Qty"
+                className="w-16 px-2 py-2 rounded-xl border border-input bg-background text-sm text-center" />
+              <span className="text-xs text-muted-foreground">×</span>
+              <input type="number" min="0" step="0.01" value={r.unit_price} onChange={e => setRow(i, 'unit_price', e.target.value)} title="Unit price"
+                className="w-24 px-2 py-2 rounded-xl border border-input bg-background text-sm text-right" />
+              <span className="w-20 text-right text-sm font-medium text-foreground">{usd((Number(r.qty) || 0) * (Number(r.unit_price) || 0))}</span>
+              <button onClick={() => removeRow(i)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+            </div>
+          ))}
+          {rows.length === 0 && <p className="text-sm text-muted-foreground">No overhead rows. Add one to start.</p>}
+        </div>
+        <div className="flex items-center justify-between border-t border-border pt-3">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground">Default cost ratio (when product cost missing)</label>
+            <input type="number" min="0" max="1" step="0.05" value={ratio} onChange={e => setRatio(e.target.value)}
+              className="w-20 px-2 py-1.5 rounded-xl border border-input bg-background text-sm text-center" />
+          </div>
+          <span className="font-semibold text-foreground">Total Overheads: {usd(liveOverhead)}</span>
+        </div>
+        <button onClick={save} disabled={saving}
+          className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50">
+          {saved ? '✓ Saved' : saving ? 'Saving…' : 'Save Overheads & Recalculate'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Finances Page ─────────────────────────────────────────────────────────
 export default function FinancesPage() {
-  const { currentUser, canAccess } = useAuthUser();
+  const { currentUser, canAccess, hasRole } = useAuthUser();
   const qc = useQueryClient();
+  const isSuper = hasRole('super_admin');
+  const TABS = isSuper ? [...BASE_TABS, 'Projected Revenue'] : BASE_TABS;
   const [tab, setTab] = useState('Summary');
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [editPurchase, setEditPurchase] = useState(null);
@@ -344,7 +448,7 @@ export default function FinancesPage() {
         </div>
 
         {/* Month picker (Summary, Purchases, Overhead) */}
-        {tab !== 'Promo Codes' && (
+        {tab !== 'Promo Codes' && tab !== 'Projected Revenue' && (
           <div className="flex items-center gap-3">
             <label className="text-sm text-muted-foreground">Month:</label>
             <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
@@ -545,6 +649,9 @@ export default function FinancesPage() {
             </div>
           </div>
         )}
+
+        {/* PROJECTED REVENUE (super-admin only) */}
+        {tab === 'Projected Revenue' && isSuper && <ProjectedRevenueTab />}
       </div>
 
       {showPurchaseModal && (

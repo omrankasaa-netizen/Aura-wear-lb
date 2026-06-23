@@ -5,7 +5,7 @@ import { base44 } from '@/api/base44Client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { logAction } from '@/lib/auditLog';
 import AccessDenied from './AccessDenied';
-import { Plus, Pencil, Trash2, Upload, ChevronRight, Eye, EyeOff, GripVertical } from 'lucide-react';
+import { Plus, Pencil, Trash2, Upload, ChevronRight, Eye, EyeOff, GripVertical, Sparkles } from 'lucide-react';
 
 function Toggle({ value, onChange }) {
   return (
@@ -142,12 +142,84 @@ function CategoryForm({ category, parentCategories, onClose, onSaved, currentUse
   );
 }
 
+function CleanupModal({ onClose, onApplied }) {
+  const [loading, setLoading] = useState(true);
+  const [applying, setApplying] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [error, setError] = useState('');
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res = await base44.functions.invoke('cleanupCategories', { apply: false });
+        setPreview(res?.data || res);
+      } catch (e) { setError(e.message); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  async function apply() {
+    setApplying(true);
+    try {
+      await base44.functions.invoke('cleanupCategories', { apply: true });
+      onApplied();
+    } catch (e) { setError(e.message); setApplying(false); }
+  }
+
+  const plan = preview?.plan || [];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h2 className="font-heading font-bold text-foreground flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-primary" /> Clean Up Categories
+          </h2>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-muted text-muted-foreground">✕</button>
+        </div>
+        <div className="p-6 space-y-3 overflow-y-auto max-h-[70vh]">
+          {loading && <p className="text-sm text-muted-foreground">Scanning for duplicates…</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {!loading && !error && (
+            <>
+              <p className="text-sm text-muted-foreground">{preview?.message}</p>
+              {plan.length > 0 && (
+                <div className="border border-border rounded-xl divide-y divide-border">
+                  {plan.map((m, i) => (
+                    <div key={i} className="px-3 py-2 text-sm flex items-center gap-2">
+                      <span className="text-destructive line-through">{m.removed}</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="font-medium text-foreground">{m.survivor}</span>
+                      {m.removedProducts ? <span className="text-xs text-muted-foreground ml-auto">{m.removedProducts} products moved</span> : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Survivors keep (or inherit) the uploaded icon and Arabic name. Product links are remapped automatically.
+              </p>
+            </>
+          )}
+        </div>
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-border text-sm hover:bg-muted">Cancel</button>
+          <button onClick={apply} disabled={applying || loading || plan.length === 0}
+            className="px-5 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50">
+            {applying ? 'Applying…' : `Merge ${plan.length} duplicate${plan.length === 1 ? '' : 's'}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CategoriesPage() {
   const { currentUser, canAccess } = useAuthUser();
   const qc = useQueryClient();
   const [editCat, setEditCat] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [showCleanup, setShowCleanup] = useState(false);
 
   const { data: allCategories = [], isLoading } = useQuery({
     queryKey: ['admin-categories-full'],
@@ -253,10 +325,16 @@ export default function CategoriesPage() {
             <h1 className="text-2xl font-heading font-bold text-foreground">Categories</h1>
             <p className="text-sm text-muted-foreground">{allCategories.length} total · Nest subcategories with the + button</p>
           </div>
-          <button onClick={() => openNew('')}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-primary/90 transition-colors">
-            <Plus className="w-4 h-4" /> Add Category
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowCleanup(true)}
+              className="flex items-center gap-2 border border-border bg-card text-foreground px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-muted transition-colors">
+              <Sparkles className="w-4 h-4 text-primary" /> Clean Up
+            </button>
+            <button onClick={() => openNew('')}
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-primary/90 transition-colors">
+              <Plus className="w-4 h-4" /> Add Category
+            </button>
+          </div>
         </div>
 
         <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
@@ -294,6 +372,18 @@ export default function CategoriesPage() {
             qc.invalidateQueries({ queryKey: ['categories'] });
             setShowForm(false);
             setEditCat(null);
+          }}
+        />
+      )}
+
+      {showCleanup && (
+        <CleanupModal
+          onClose={() => setShowCleanup(false)}
+          onApplied={() => {
+            qc.invalidateQueries({ queryKey: ['admin-categories-full'] });
+            qc.invalidateQueries({ queryKey: ['categories'] });
+            qc.invalidateQueries({ queryKey: ['admin-products-count'] });
+            setShowCleanup(false);
           }}
         />
       )}
