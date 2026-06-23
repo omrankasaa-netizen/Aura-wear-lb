@@ -5,6 +5,7 @@ import { useLang } from '@/contexts/LanguageContext';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { BRAND } from '@/lib/brand';
+import { cmsImageSrc } from '@/lib/imageFraming';
 
 export default function HeroSection() {
   const { lang, t } = useLang();
@@ -25,7 +26,7 @@ export default function HeroSection() {
     <section className="relative overflow-hidden bg-secondary">
       <div className="relative aspect-[4/5] sm:aspect-[16/10] lg:aspect-[16/7] w-full">
         {imgUrl ? (
-          <img src={imgUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          <img src={cmsImageSrc(imgUrl, 'large')} alt="" loading="eager" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-secondary via-stone to-secondary" />
         )}

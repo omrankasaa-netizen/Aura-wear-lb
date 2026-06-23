@@ -75,10 +75,14 @@ export default function TeamManagement() {
   }
 
   async function changeRole(userId, newRole) {
-    if (!isSuperAdmin && newRole !== ROLES.STAFF) return;
-    await base44.entities.User.update(userId, { role: newRole });
-    await logAction({ action: 'role_changed', entity: 'User', entityId: userId, userName: currentUser?.full_name || currentUser?.email });
-    qc.invalidateQueries({ queryKey: ['admin-users'] });
+    if (!isSuperAdmin) return;
+    try {
+      const res = await base44.functions.invoke('setUserRole', { user_id: userId, role: newRole });
+      if (res?.data?.error) { setInviteMsg('Failed: ' + res.data.error); return; }
+      qc.invalidateQueries({ queryKey: ['admin-users'] });
+    } catch (err) {
+      setInviteMsg('Failed: ' + err.message);
+    }
   }
 
   return (

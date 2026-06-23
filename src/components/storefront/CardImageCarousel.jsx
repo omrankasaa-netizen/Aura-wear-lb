@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { frameImageStyle } from '@/lib/imageFraming';
+import { frameImageStyle, cmsImageSrc, handleImageError } from '@/lib/imageFraming';
 
 // Fixed 3:4 portrait image area for a product card.
 //
@@ -61,9 +61,11 @@ export default function CardImageCarousel({ images, fallbackAlt = '', rtl = fals
       onTouchEnd={multiple ? onTouchEnd : undefined}
     >
       <img
-        src={current.url}
+        src={current.variants ? (current.variants.card || current.url) : cmsImageSrc(current.url, 'card')}
         alt={current.alt || fallbackAlt}
         loading="lazy"
+        decoding="async"
+        onError={handleImageError}
         className="select-none transition-transform duration-500 group-hover:scale-105"
         style={frameImageStyle(current.focal, current.crop)}
         draggable={false}
