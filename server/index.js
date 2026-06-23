@@ -16,6 +16,7 @@ import {
   issueOtp, verifyOtp as verifyOtpCode,
 } from './auth.js';
 import { invokeFunction } from './functions.js';
+import { isCustomerBlocked } from './adminTools.js';
 import { sendEmail } from './email.js';
 import { runSeed } from './seed.js';
 import { optimizeAndStore, bufferFromBase64 } from './imageOptimize.js';
@@ -337,6 +338,10 @@ function stripPrivilegedUserFields(entity, body) {
 
 app.post('/api/entities/:entity', ensureEntity, authorizeWrite('create'), (req, res) => {
   try {
+    // Blocked customers cannot place orders (matched by customer_id or email).
+    if (req.params.entity === 'Order' && !isAdmin(getUserFromRequest(req)) && isCustomerBlocked(req.body)) {
+      return res.status(403).json({ error: 'This account is not able to place orders. Please contact support.' });
+    }
     const body = stripPrivilegedUserFields(req.params.entity, req.body);
     const record = createRecord(req.params.entity, body);
     res.json(sanitize(req.params.entity, record));

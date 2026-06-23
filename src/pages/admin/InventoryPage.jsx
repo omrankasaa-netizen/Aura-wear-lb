@@ -5,8 +5,9 @@ import { base44 } from '@/api/base44Client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { manualStockAdjust, stockStatus } from '@/lib/inventory';
 import { logAction } from '@/lib/auditLog';
-import { Warehouse, ChevronDown, ChevronUp, Plus, Minus, PackagePlus, Filter, Search } from 'lucide-react';
+import { Warehouse, ChevronDown, ChevronUp, Plus, Minus, PackagePlus, Filter, Search, Download, Printer } from 'lucide-react';
 import AccessDenied from './AccessDenied';
+import { exportViaFunction, printTable } from '@/lib/adminExport';
 
 const MOVEMENT_TYPES = ['Received', 'Correction', 'Damaged'];
 const MOVEMENT_COLORS = {
@@ -324,6 +325,25 @@ export default function InventoryPage() {
     return true;
   }), [movements, movFilter, products]);
 
+  const [exporting, setExporting] = useState(false);
+  async function handleExport() {
+    setExporting(true);
+    try { await exportViaFunction(base44, 'exportInventoryCsv', {}); }
+    finally { setExporting(false); }
+  }
+  function handlePrint() {
+    const headers = ['Product', 'SKU', 'Reorder At', 'Stock', 'Status'];
+    const rows = [];
+    for (const p of products) {
+      const pvs = variantsByProduct[p.id] || [];
+      const hasVariants = p.has_variants && pvs.length > 0;
+      const qty = hasVariants ? pvs.reduce((s, v) => s + (v.qty_on_hand || 0), 0) : (p.stock_quantity || 0);
+      const st = stockStatus(qty, p.reorder_level);
+      rows.push([p.name, p.sku || '', p.reorder_level ?? 3, qty, st.label]);
+    }
+    printTable('Inventory', headers, rows);
+  }
+
   if (!canAccess('manage_inventory')) return <AdminLayout><AccessDenied /></AdminLayout>;
 
   return (
@@ -338,10 +358,20 @@ export default function InventoryPage() {
               <p className="text-sm text-muted-foreground">{products.length} products</p>
             </div>
           </div>
-          <button onClick={() => setShowReceive(true)}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-primary/90 transition-colors">
-            <PackagePlus className="w-4 h-4" /> Receive Shipment
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleExport} disabled={exporting}
+              className="flex items-center gap-2 border border-border bg-card text-foreground px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-muted transition-colors disabled:opacity-50">
+              <Download className="w-4 h-4" /> {exporting ? 'Exporting…' : 'Export CSV'}
+            </button>
+            <button onClick={handlePrint}
+              className="flex items-center gap-2 border border-border bg-card text-foreground px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-muted transition-colors">
+              <Printer className="w-4 h-4" /> Print
+            </button>
+            <button onClick={() => setShowReceive(true)}
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm hover:bg-primary/90 transition-colors">
+              <PackagePlus className="w-4 h-4" /> Receive Shipment
+            </button>
+          </div>
         </div>
 
         {/* Low-stock alert banner */}
