@@ -107,6 +107,13 @@ export function nowIso() {
   return new Date().toISOString();
 }
 
+// Monotonic data-version counter, bumped on every write. Lets aggregate caches
+// (e.g. the admin dashboard snapshot) invalidate as soon as any entity changes
+// instead of relying on a TTL alone.
+let _writeVersion = 0;
+export function getWriteVersion() { return _writeVersion; }
+function bumpWriteVersion() { _writeVersion++; }
+
 export function createRecord(entity, data = {}, opts = {}) {
   const table = tableFor(entity);
   const id = data.id || opts.id || randomUUID();
@@ -120,6 +127,7 @@ export function createRecord(entity, data = {}, opts = {}) {
   db.prepare(
     `INSERT INTO ${table} (id, created_date, updated_date, doc) VALUES (?, ?, ?, ?)`
   ).run(id, created, updated, JSON.stringify(doc));
+  bumpWriteVersion();
   return getRecord(entity, id);
 }
 
@@ -152,12 +160,14 @@ export function updateRecord(entity, id, patch = {}) {
   db.prepare(`UPDATE ${table} SET doc = ?, updated_date = ? WHERE id = ?`).run(
     JSON.stringify(merged), updated, id
   );
+  bumpWriteVersion();
   return getRecord(entity, id);
 }
 
 export function deleteRecord(entity, id) {
   const table = tableFor(entity);
   db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+  bumpWriteVersion();
   return { ok: true, id };
 }
 
