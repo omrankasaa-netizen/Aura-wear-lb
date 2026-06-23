@@ -618,6 +618,116 @@ export const ADMIN_TOOL_GUARDS = {
   exportCustomerEmailsCsv: 'admin',
 };
 
+// ─── Generic entity money lockdown ──────────────────────────────────────────
+// The generic /api/entities read+write surface is otherwise role-blind, so it
+// would hand monetary figures to any non-super-admin reader (a plain admin or
+// staff, or even an anonymous storefront client). These maps centralize which
+// fields are monetary per entity so the generic endpoints can strip them.
+//
+// Retail price fields (price_usd, compare_at_price_usd, promo/discount values)
+// are intentionally NOT listed: the public storefront must show them. Only
+// internal money — order aggregates, line totals, customer spend, product cost,
+// purchases, and overheads — is gated.
+const MONEY_FIELDS = {
+  Order: [
+    'subtotal_usd', 'discount_usd', 'delivery_fee_usd', 'grand_total_usd',
+    'tax_usd', 'tip_usd', 'refund_usd', 'refunded_usd',
+    'amount_paid_usd', 'amount_refunded_usd', 'total_usd',
+  ],
+  OrderItem: ['unit_price_usd', 'line_total_usd', 'cost_usd', 'discount_usd'],
+  Customer: ['total_spent_usd', 'lifetime_spend_usd', 'aov', 'aov_usd'],
+  Product: ['cost_usd', 'cost'],
+  ProductVariant: ['cost_usd', 'cost'],
+  Purchase: ['amount_usd', 'cost_usd', 'unit_cost_usd', 'total_cost_usd', 'grand_total_usd', 'subtotal_usd'],
+  Overhead: ['rent_usd', 'utilities_usd', 'marketing_usd', 'other_usd', 'amount_usd', 'amount', 'total_usd'],
+};
+
+// Entities whose money may legitimately be seen by the record's owner (a
+// customer viewing their OWN order/spend) or via guest self-service lookups.
+// Everything else (Product cost, Purchase, Overhead) is strictly super-admin.
+const OWNERSHIP_MONEY_ENTITIES = new Set(['Order', 'OrderItem', 'Customer']);
+
+// Internal-only money entities: non-super writes must never set or wipe these
+// fields. (Order/OrderItem/Customer are excluded — guest checkout writes their
+// money legitimately, and updateRecord merges so untouched fields are kept.)
+const WRITE_MONEY_ENTITIES = new Set(['Product', 'ProductVariant', 'Purchase', 'Overhead']);
+
+function stripFields(rec, fields) {
+  let copy = null;
+  for (const f of fields) {
+    if (rec && Object.prototype.hasOwnProperty.call(rec, f)) {
+      if (!copy) copy = { ...rec };
+      delete copy[f];
+    }
+  }
+  return copy || rec;
+}
+
+function ownsOrder(o, user) {
+  if (!user || !o) return false;
+  const email = (user.email || '').toLowerCase();
+  return !!(
+    (o.customer_email && String(o.customer_email).toLowerCase() === email) ||
+    (o.customer_id && o.customer_id === user.id)
+  );
+}
+
+function ownsCustomer(c, user) {
+  if (!user || !c) return false;
+  const email = (user.email || '').toLowerCase();
+  return !!(
+    (c.user_id && c.user_id === user.id) ||
+    (c.account_id && c.account_id === user.id) ||
+    (c.email && String(c.email).toLowerCase() === email)
+  );
+}
+
+// Strip monetary fields from generic entity READ output for non-super-admins.
+// `records` may be a single record or an array. `query` is the parsed list
+// filter (used to recognize self-service flows: guest order tracking by
+// order_number, and own-order line items scoped by order_id).
+export function shapeEntityReadsForRole(entity, records, user, query) {
+  const fields = MONEY_FIELDS[entity];
+  if (!fields) return records;        // entity carries no gated money
+  if (isSuper(user)) return records;  // super admins see everything
+
+  const single = !Array.isArray(records);
+  const arr = single ? [records] : records;
+
+  const rank = ROLE_RANK[user?.role] ?? -1;
+  const canSelfServe = rank < ROLE_RANK.staff; // guest or customer only
+  const orderNumberLookup = !!(query && Object.prototype.hasOwnProperty.call(query, 'order_number'));
+  const orderIdScoped = !!(query && Object.prototype.hasOwnProperty.call(query, 'order_id'));
+
+  const shaped = arr.map((rec) => {
+    if (!rec) return rec;
+    if (!OWNERSHIP_MONEY_ENTITIES.has(entity)) return stripFields(rec, fields); // always strip
+    let keepMoney = false;
+    if (entity === 'Order') {
+      keepMoney = ownsOrder(rec, user) || (canSelfServe && orderNumberLookup);
+    } else if (entity === 'OrderItem') {
+      // Line items are fetched scoped by order_id; allow only for guest/customer
+      // self-service (admin-tier readers get them stripped).
+      keepMoney = canSelfServe && orderIdScoped;
+    } else if (entity === 'Customer') {
+      keepMoney = ownsCustomer(rec, user);
+    }
+    return keepMoney ? rec : stripFields(rec, fields);
+  });
+
+  return single ? shaped[0] : shaped;
+}
+
+// Strip monetary fields from a generic entity WRITE payload for non-super
+// admins, so they cannot set OR (thanks to merge-update) wipe internal money.
+export function stripWriteMoneyForRole(entity, body, user) {
+  if (isSuper(user)) return body;
+  if (!WRITE_MONEY_ENTITIES.has(entity)) return body;
+  const fields = MONEY_FIELDS[entity];
+  if (!fields || !body) return body;
+  return stripFields(body, fields);
+}
+
 // Helper reused by the order-create guard in index.js.
 export function isCustomerBlocked(orderBody) {
   const email = (orderBody?.customer_email || '').toLowerCase();
