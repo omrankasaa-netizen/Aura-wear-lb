@@ -16,7 +16,7 @@ import {
   issueOtp, verifyOtp as verifyOtpCode,
 } from './auth.js';
 import { invokeFunction } from './functions.js';
-import { isCustomerBlocked } from './adminTools.js';
+import { isCustomerBlocked, shapeEntityReadsForRole, stripWriteMoneyForRole } from './adminTools.js';
 import { sendEmail } from './email.js';
 import { runSeed } from './seed.js';
 import { optimizeAndStore, bufferFromBase64 } from './imageOptimize.js';
@@ -311,18 +311,21 @@ function sanitize(entity, record) {
 
 app.get('/api/entities/:entity', ensureEntity, (req, res) => {
   try {
+    const user = getUserFromRequest(req);
     const { query, sort, limit } = parseListParams(req);
     const records = queryRecords(req.params.entity, { query, sort, limit })
       .map((r) => sanitize(req.params.entity, r));
-    res.json(records);
+    // Strip monetary fields for non-super-admins (own/self-service orders kept).
+    res.json(shapeEntityReadsForRole(req.params.entity, records, user, query));
   } catch (e) { handleError(res, e); }
 });
 
 app.get('/api/entities/:entity/:id', ensureEntity, (req, res) => {
   try {
+    const user = getUserFromRequest(req);
     const record = getRecord(req.params.entity, req.params.id);
     if (!record) return res.status(404).json({ error: 'Not found' });
-    res.json(sanitize(req.params.entity, record));
+    res.json(shapeEntityReadsForRole(req.params.entity, sanitize(req.params.entity, record), user));
   } catch (e) { handleError(res, e); }
 });
 
@@ -342,7 +345,8 @@ app.post('/api/entities/:entity', ensureEntity, authorizeWrite('create'), (req, 
     if (req.params.entity === 'Order' && !isAdmin(getUserFromRequest(req)) && isCustomerBlocked(req.body)) {
       return res.status(403).json({ error: 'This account is not able to place orders. Please contact support.' });
     }
-    const body = stripPrivilegedUserFields(req.params.entity, req.body);
+    let body = stripPrivilegedUserFields(req.params.entity, req.body);
+    body = stripWriteMoneyForRole(req.params.entity, body, getUserFromRequest(req));
     const record = createRecord(req.params.entity, body);
     res.json(sanitize(req.params.entity, record));
   } catch (e) { handleError(res, e); }
@@ -350,9 +354,11 @@ app.post('/api/entities/:entity', ensureEntity, authorizeWrite('create'), (req, 
 
 app.put('/api/entities/:entity/:id', ensureEntity, authorizeWrite('update'), (req, res) => {
   try {
-    const body = stripPrivilegedUserFields(req.params.entity, req.body);
+    const actor = getUserFromRequest(req);
+    let body = stripPrivilegedUserFields(req.params.entity, req.body);
+    body = stripWriteMoneyForRole(req.params.entity, body, actor);
     const record = updateRecord(req.params.entity, req.params.id, body);
-    res.json(sanitize(req.params.entity, record));
+    res.json(shapeEntityReadsForRole(req.params.entity, sanitize(req.params.entity, record), actor));
   } catch (e) { handleError(res, e); }
 });
 
