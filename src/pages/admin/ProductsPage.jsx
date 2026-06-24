@@ -319,6 +319,8 @@ export default function ProductsPage() {
             qc.invalidateQueries({ queryKey: ['admin-products'] });
             qc.invalidateQueries({ queryKey: ['admin-variants-all'] });
             qc.invalidateQueries({ queryKey: ['admin-product-images'] });
+            qc.invalidateQueries({ queryKey: ['form-variants'] });
+            qc.invalidateQueries({ queryKey: ['form-images'] });
             setShowForm(false);
             setEditProduct(null);
           }}
