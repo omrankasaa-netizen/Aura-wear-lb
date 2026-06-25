@@ -130,17 +130,29 @@ export default function ProductsPage() {
     try { await exportViaFunction(base44, 'exportProductsCsv', {}); }
     finally { setExporting(false); }
   }
+  // Print expanded to ONE ROW PER SIZE/VARIANT so the sheet shows stock per
+  // size per variant (matching the CSV). Products without variants print a
+  // single row with Size/Variant blank and the product total stock.
   function handlePrint() {
-    const headers = ['Name', 'SKU', 'Category', 'Price', 'Stock', 'Status'];
-    const rows = filtered.map(p => [
-      p.name,
-      p.sku || '',
-      catMap[p.category_id] || '',
-      p.price_usd != null ? `$${p.price_usd.toFixed(2)}` : '',
-      getQty(p, variantsByProduct[p.id] || []),
-      p.status || '',
-    ]);
-    printTable('Products', headers, rows);
+    const headers = ['Name', 'SKU', 'Category', 'Size', 'Variant', 'Price', 'Stock', 'Status'];
+    const rows = [];
+    for (const p of filtered) {
+      const pvs = variantsByProduct[p.id] || [];
+      const price = p.price_usd != null ? `$${p.price_usd.toFixed(2)}` : '';
+      const cat = catMap[p.category_id] || '';
+      const status = p.status || '';
+      if (p.has_variants && pvs.length > 0) {
+        for (const v of pvs) {
+          rows.push([
+            p.name, v.sku || p.sku || '', cat,
+            v.size || '', v.color || '', price, v.qty_on_hand || 0, status,
+          ]);
+        }
+      } else {
+        rows.push([p.name, p.sku || '', cat, '', '', price, getQty(p, pvs), status]);
+      }
+    }
+    printTable('Products — Stock by Size & Variant', headers, rows);
   }
 
   if (!canAccess('view_products')) return <AdminLayout><AccessDenied /></AdminLayout>;
