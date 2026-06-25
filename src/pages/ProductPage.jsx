@@ -11,13 +11,6 @@ import { ReviewList, ReviewForm } from '@/components/storefront/ReviewCard';
 import { BRAND, whatsappLink } from '@/lib/brand';
 import { imageSrc, handleImageError } from '@/lib/imageFraming';
 
-const COLOR_HEX = {
-  White: '#FFFFFF', Black: '#111111', Beige: '#E9E3DA', Cream: '#FAF8F4',
-  Blue: '#1F2A37', Navy: '#1F2A37', Olive: '#5A5E45', Grey: '#9CA3AF',
-  Brown: '#6B4F3A', Green: '#3B6E4D', Red: '#B23A2E', Charcoal: '#26262A',
-  Stone: '#D8D2C7', Khaki: '#9A8F73',
-};
-
 function Accordion({ title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -214,11 +207,12 @@ export default function ProductPage() {
             {colors.length > 0 && (
               <div className="mt-6">
                 <p className="text-sm mb-2.5">{t('Color', 'اللون')}{selectedColor && <span className="text-muted-foreground"> — {selectedColor}</span>}</p>
-                <div className="flex flex-wrap gap-2.5">
+                <div className="flex flex-wrap gap-2">
                   {colors.map(c => (
                     <button key={c} onClick={() => setSelectedColor(c)} title={c}
-                      className={`w-9 h-9 rounded-full border transition-all ${selectedColor === c ? 'ring-2 ring-foreground ring-offset-2 ring-offset-background border-transparent' : 'border-stone hover:border-foreground'}`}
-                      style={{ backgroundColor: COLOR_HEX[c] || '#999' }} />
+                      className={`px-3 py-1.5 rounded-sm text-sm border transition-colors ${selectedColor === c ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:border-foreground'}`}>
+                      {c}
+                    </button>
                   ))}
                 </div>
               </div>
