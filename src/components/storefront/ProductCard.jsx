@@ -10,16 +10,6 @@ import WishlistHeart from './WishlistHeart';
 import { BRAND, whatsappLink } from '@/lib/brand';
 import CardImageCarousel from './CardImageCarousel';
 
-// Swatch hex map (mirrors the product page) so the card swatches render real
-// colors. Unknown names fall back to a neutral grey.
-const COLOR_HEX = {
-  White: '#FFFFFF', Black: '#111111', Beige: '#E9E3DA', Cream: '#FAF8F4',
-  Blue: '#1F2A37', Navy: '#1F2A37', Olive: '#5A5E45', Grey: '#9CA3AF',
-  Brown: '#6B4F3A', Green: '#3B6E4D', Red: '#B23A2E', Charcoal: '#26262A',
-  Stone: '#D8D2C7', Khaki: '#9A8F73', Pink: '#E8B4B8', Sage: '#9CAF88',
-  Blush: '#E8C4C0', Yellow: '#E8D86A',
-};
-
 function Badge({ children, tone = 'dark' }) {
   const tones = {
     dark: 'bg-primary text-primary-foreground',
@@ -127,10 +117,12 @@ export default function ProductCard({ product }) {
           {fit && <p className="eyebrow text-muted-foreground text-[10px] mb-1">{fit}</p>}
           <p className="text-sm font-medium leading-snug line-clamp-1">{name}</p>
 
-          {/* Color swatches — hover/click swaps the card photo to that color */}
+          {/* Color options as clickable text chips, shown below the card image.
+              Hover or click swaps the card photo to the matching color's photo
+              without navigating into the product page. */}
           {swatchColors.length > 1 && (
-            <div className="flex items-center gap-1.5 mt-1.5" onClick={(e) => e.preventDefault()}>
-              {swatchColors.slice(0, 6).map(c => (
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5" onClick={(e) => e.preventDefault()}>
+              {swatchColors.slice(0, 5).map(c => (
                 <button
                   key={c}
                   type="button"
@@ -138,11 +130,12 @@ export default function ProductCard({ product }) {
                   aria-label={c}
                   onMouseEnter={() => setActiveColor(c)}
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveColor(c); }}
-                  className={`w-4 h-4 rounded-full border transition-all ${activeColor === c ? 'ring-1 ring-foreground ring-offset-1 ring-offset-background border-transparent' : 'border-stone hover:border-foreground'}`}
-                  style={{ backgroundColor: COLOR_HEX[c] || '#999' }}
-                />
+                  className={`text-[11px] leading-none px-2 py-1 rounded-full border transition-colors ${activeColor === c ? 'border-foreground bg-foreground text-background' : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground'}`}
+                >
+                  {c}
+                </button>
               ))}
-              {swatchColors.length > 6 && <span className="text-[10px] text-muted-foreground">+{swatchColors.length - 6}</span>}
+              {swatchColors.length > 5 && <span className="text-[10px] text-muted-foreground">+{swatchColors.length - 5}</span>}
             </div>
           )}
           <div className="flex items-baseline gap-2 mt-1">
