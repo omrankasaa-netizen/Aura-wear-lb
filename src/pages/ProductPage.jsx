@@ -161,7 +161,7 @@ export default function ProductPage() {
               {displayImages.length > 0 ? (
                 <img src={imageSrc(displayImages[imgIdx], 'large')} alt={name} loading="eager" decoding="async" onError={handleImageError}
                   onClick={() => setLightboxOpen(true)}
-                  className="w-full h-full object-cover cursor-zoom-in" />
+                  className="absolute inset-0 w-full h-full object-contain cursor-zoom-in" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <img src="/brand/aura-mark.png" alt="" className="w-16 h-16 opacity-20" />
