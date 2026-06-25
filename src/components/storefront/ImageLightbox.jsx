@@ -65,11 +65,23 @@ export default function ImageLightbox({ images, startIndex = 0, alt = '', rtl = 
     touchStartX.current = null;
   }
 
+  // Close on a genuine backdrop click. We also stopPropagation on EVERY click
+  // inside the overlay: this component is rendered through a React portal, and
+  // React bubbles synthetic events through the COMPONENT tree (not the DOM tree),
+  // so without this a click here would bubble up to a parent <Link> (e.g. the
+  // product card) and navigate the page. mousedown is captured to avoid the
+  // click target changing if the user drags slightly while zooming.
+  function onBackdropClick(e) {
+    e.stopPropagation();
+    if (e.target === e.currentTarget) onClose?.();
+  }
+
   const node = (
     <div
       className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex flex-col"
       dir={rtl ? 'rtl' : 'ltr'}
-      onClick={onClose}
+      onClick={onBackdropClick}
+      onMouseDown={(e) => e.stopPropagation()}
       role="dialog"
       aria-modal="true"
     >
