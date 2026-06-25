@@ -295,17 +295,18 @@ export default function BulkUploadPage() {
             <ul className="space-y-1.5 list-none">
               <li>🔴 <strong>Required:</strong> <code>name</code>, <code>category</code>, <code>price_usd</code></li>
               <li>📏 <strong>sizes</strong> — separate multiple sizes with <code>|</code> (pipe), no spaces around it<br />
-                <span className="ml-5 text-green-700">✅ NB|3M|6M|12M</span>&nbsp;&nbsp;<span className="ml-3 text-destructive">❌ NB, 3M, 6M</span>&nbsp;&nbsp;<span className="ml-3 text-destructive">❌ NB | 3M | 6M</span><br />
+                <span className="ml-5 text-green-700">✅ XS|S|M|L|XL</span>&nbsp;&nbsp;<span className="ml-3 text-destructive">❌ S, M, L</span>&nbsp;&nbsp;<span className="ml-3 text-destructive">❌ S | M | L</span><br />
                 <span className="ml-5">Leave blank if the product has only one size or is one-size-fits-all.</span>
               </li>
               <li>🎨 <strong>colors</strong> — same rule: pipe-separated, no spaces<br />
-                <span className="ml-5 text-green-700">✅ White|Pink|Mint</span>&nbsp;&nbsp;<span className="ml-3 text-destructive">❌ White, Pink, Mint</span>
+                <span className="ml-5 text-green-700">✅ Black|White|Navy|Beige</span>&nbsp;&nbsp;<span className="ml-3 text-destructive">❌ Black, White, Navy</span>
               </li>
               <li>📦 <strong>stock_quantity</strong> — total stock count (number only, e.g. <code>20</code>)</li>
               <li>💰 <strong>price_usd</strong> — price per single piece (e.g. <code>12.99</code>). Never a bundle total.</li>
               <li>✅ <strong>is_new / is_featured / status:</strong> use exactly <code>TRUE</code>, <code>FALSE</code>, <code>Active</code>, <code>Hidden</code></li>
-              <li>👤 <strong>gender:</strong> <code>Girls</code> · <code>Boys</code> · <code>Unisex</code></li>
-              <li>👶 <strong>age_group:</strong> <code>Newborn</code> · <code>Baby</code> · <code>Toddler</code> · <code>Kids</code></li>
+              <li>👤 <strong>gender:</strong> <code>Women</code> · <code>Men</code> · <code>Unisex</code></li>
+              <li>🧑 <strong>age_group:</strong> <code>Adults</code> · <code>Teens</code></li>
+              <li>🏷️ <strong>sku</strong> — your unique product code. Used to match catalog discounts, so keep it unique and consistent.</li>
               <li>⚠️ <strong>Delete the INSTRUCTIONS row</strong> (row 2) before uploading — keep the header row.</li>
             </ul>
           </div>
