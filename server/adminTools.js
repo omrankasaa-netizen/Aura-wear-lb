@@ -504,16 +504,29 @@ async function exportProductsCsv(body, user) {
   const variantsByProduct = {};
   for (const v of variants) (variantsByProduct[v.product_id] ||= []).push(v);
 
-  const headers = ['Name', 'SKU', 'Category', 'Status', 'Price (USD)', 'Stock'];
+  // One row PER SIZE/VARIANT so the export shows stock per size per variant.
+  // Products without variants emit a single row (Size/Variant blank, product
+  // total stock). Stock Value at cost is qty×unit cost.
+  const headers = ['Name', 'SKU', 'Category', 'Size', 'Variant', 'Status', 'Price (USD)', 'Stock'];
   if (show_money) headers.push('Cost (USD)', 'Stock Value at Cost (USD)');
-  const rows = products.map(p => {
-    const stock = stockOf(p, variantsByProduct);
+  const rows = [];
+  for (const p of products) {
     const price = Number(p.price_usd) || 0;
     const cost = Number(p.cost_usd) || 0;
-    const row = [p.name, p.sku || '', catName[p.category_id] || '', p.status || '', price.toFixed(2), stock];
-    if (show_money) row.push(cost.toFixed(2), (cost * stock).toFixed(2));
-    return row;
-  });
+    const cat = catName[p.category_id] || '';
+    const status = p.status || '';
+    const pvs = variantsByProduct[p.id] || [];
+    const emit = (sku, size, variant, qty) => {
+      const row = [p.name, sku || '', cat, size || '', variant || '', status, price.toFixed(2), qty];
+      if (show_money) row.push(cost.toFixed(2), (cost * qty).toFixed(2));
+      rows.push(row);
+    };
+    if (p.has_variants && pvs.length > 0) {
+      for (const v of pvs) emit(v.sku || p.sku, v.size, v.color, Number(v.qty_on_hand) || 0);
+    } else {
+      emit(p.sku, '', '', Number(p.stock_quantity) || 0);
+    }
+  }
   return { filename: 'products.csv', csv: toCsv(headers, rows) };
 }
 
