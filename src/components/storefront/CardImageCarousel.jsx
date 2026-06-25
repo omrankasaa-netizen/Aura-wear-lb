@@ -11,7 +11,7 @@ import { frameImageStyle, cmsImageSrc, handleImageError } from '@/lib/imageFrami
 // Each photo is center-cropped to 3:4 and honors its own focal/crop metadata.
 // Single-image products render no controls. Arrows/dots stopPropagation so they
 // never trigger the parent <Link> navigation.
-export default function CardImageCarousel({ images, fallbackAlt = '', rtl = false, jumpToIndex = null }) {
+export default function CardImageCarousel({ images, fallbackAlt = '', rtl = false, jumpToIndex = null, onImageClick = null }) {
   const [index, setIndex] = useState(0);
   const touchStartX = useRef(null);
 
@@ -71,7 +71,10 @@ export default function CardImageCarousel({ images, fallbackAlt = '', rtl = fals
         loading="lazy"
         decoding="async"
         onError={handleImageError}
-        className="select-none transition-transform duration-500 group-hover:scale-105"
+        onClick={onImageClick ? (e) => { e.preventDefault(); e.stopPropagation(); onImageClick(safeIndex); } : undefined}
+        // Hover-zoom only on devices that truly hover (hover-zoom would otherwise
+        // "stick" after a tap on touch screens and push the image out of frame).
+        className={`select-none transition-transform duration-500 [@media(hover:hover)]:group-hover:scale-105 ${onImageClick ? 'cursor-zoom-in' : ''}`}
         style={frameImageStyle(current.focal, current.crop)}
         draggable={false}
       />

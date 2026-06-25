@@ -55,9 +55,16 @@ export function frameImageStyle(focal, crop) {
       objectFit: 'cover',
     };
   }
+  // Pin the image to the box edges so it can never lay out larger than its 3:4
+  // container (some mobile browsers otherwise size an <img> to its intrinsic
+  // dimensions and overflow the card). object-cover keeps it cropped to fill.
   return {
+    position: 'absolute',
+    inset: 0,
     width: '100%',
     height: '100%',
+    maxWidth: '100%',
+    maxHeight: '100%',
     objectFit: 'cover',
     objectPosition: focalPosition(focal),
   };

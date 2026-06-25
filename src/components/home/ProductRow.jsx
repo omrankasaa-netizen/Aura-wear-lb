@@ -68,7 +68,7 @@ export default function ProductRow({ title, titleAr, filter, viewAllLink }) {
         </div>
         <div ref={scrollRef} className="lg:hidden flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar">
           {products.map(p => (
-            <div key={p.id} className="snap-start shrink-0 w-[44%] sm:w-[30%]">
+            <div key={p.id} className="snap-start shrink-0 w-[68%] sm:w-[42%]">
               <ProductCard product={p} />
             </div>
           ))}
