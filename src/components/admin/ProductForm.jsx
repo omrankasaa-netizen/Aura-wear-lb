@@ -7,8 +7,9 @@ import { X, Upload, Star, Trash2, ImageIcon, Crop as CropIcon } from 'lucide-rea
 import ImageFramingEditor from './ImageFramingEditor';
 import { frameImageStyle } from '@/lib/imageFraming';
 
-const SIZES = ['NB', '0-3M', '3-6M', '6-12M', '12-18M', '18-24M', '2Y', '3Y', '4Y', '5Y', '6Y'];
-const COLORS_DEFAULT = ['White', 'Black', 'Pink', 'Blue', 'Sage', 'Cream', 'Blush', 'Yellow', 'Red'];
+// Adult apparel sizing (Aura is an adult fashion store).
+const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
+const COLORS_DEFAULT = ['White', 'Black', 'Beige', 'Cream', 'Navy', 'Blue', 'Olive', 'Grey', 'Brown', 'Green', 'Red', 'Stone', 'Khaki', 'Charcoal'];
 
 function ChipInput({ label, chips, setChips, suggestions }) {
   const [input, setInput] = useState('');
@@ -233,6 +234,10 @@ export default function ProductForm({ product, categories, onClose, onSaved, clo
     setImages(imgs => imgs.map((img, i) => i === idx ? { ...img, focal, crop } : img));
   }
 
+  function setImageColor(idx, color) {
+    setImages(imgs => imgs.map((img, i) => i === idx ? { ...img, color } : img));
+  }
+
   async function handleSave() {
     if (!form.name || !form.price_usd) { setError('Name and price are required.'); return; }
     if (isClone && !(form.sku || '').trim()) { setError('A unique SKU is required before saving the duplicate.'); return; }
@@ -251,6 +256,12 @@ export default function ProductForm({ product, categories, onClose, onSaved, clo
         compare_at_price_usd: form.compare_at_price_usd ? Number(form.compare_at_price_usd) : null,
         cost_usd: form.cost_usd ? Number(form.cost_usd) : null,
         stock_quantity: form.has_variants ? 0 : Number(form.stock_quantity || 0),
+        // Persist the variant sizes/colors as pipe-joined strings on the product.
+        // The storefront product page renders its size/color pickers from these
+        // strings, so without writing them here a variant product would show NO
+        // pickers and could never be added to cart. Empty when no variants.
+        sizes: form.has_variants ? sizes.join('|') : '',
+        colors: form.has_variants ? colors.join('|') : '',
       };
       // Cost is super-admin-only money; never let a non-super write/overwrite it.
       if (!canSeeCost) delete payload.cost_usd;
@@ -317,7 +328,9 @@ export default function ProductForm({ product, categories, onClose, onSaved, clo
       // Save images
       for (let i = 0; i < images.length; i++) {
         const img = images[i];
-        const imgPayload = { product_id: productId, url: img.url, variants: img.variants ?? null, is_primary: img.is_primary, sort_order: i, alt: form.name, alt_ar: form.name_ar, focal: img.focal ?? null, crop: img.crop ?? null };
+        // `color` links a photo to a variant color so the storefront card can
+        // swap the image when a shopper picks that color (optional; '' = none).
+        const imgPayload = { product_id: productId, url: img.url, variants: img.variants ?? null, is_primary: img.is_primary, sort_order: i, alt: form.name, alt_ar: form.name_ar, focal: img.focal ?? null, crop: img.crop ?? null, color: img.color || '' };
         if (img.id && !img.isNew) {
           await base44.entities.ProductImage.update(img.id, imgPayload);
         } else if (img.isNew || !img.id) {
@@ -422,13 +435,13 @@ export default function ProductForm({ product, categories, onClose, onSaved, clo
                 <Field label="Gender">
                   <Select value={form.gender} onChange={e => set('gender', e.target.value)}>
                     <option value="">— Select —</option>
-                    {['Girls','Boys','Unisex'].map(g => <option key={g}>{g}</option>)}
+                    {['Women','Men','Unisex'].map(g => <option key={g}>{g}</option>)}
                   </Select>
                 </Field>
                 <Field label="Age Group">
                   <Select value={form.age_group} onChange={e => set('age_group', e.target.value)}>
                     <option value="">— Select —</option>
-                    {['Newborn','Baby','Toddler','Kids'].map(a => <option key={a}>{a}</option>)}
+                    {['Adults','Teens'].map(a => <option key={a}>{a}</option>)}
                   </Select>
                 </Field>
               </div>
@@ -596,9 +609,23 @@ export default function ProductForm({ product, categories, onClose, onSaved, clo
                       {(img.crop || (img.focal && (img.focal.x !== 0.5 || img.focal.y !== 0.5))) && (
                         <span className="absolute bottom-1.5 right-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-full">Framed</span>
                       )}
+                      {/* Link this photo to a color so the storefront card can
+                          show it when a shopper selects that color swatch. */}
+                      {colors.length > 0 && (
+                        <div className="p-1.5 bg-card border-t border-border">
+                          <select value={img.color || ''} onChange={e => setImageColor(idx, e.target.value)}
+                            className="w-full text-[11px] px-1.5 py-1 rounded-lg border border-input bg-background text-foreground outline-none focus:ring-1 focus:ring-ring">
+                            <option value="">No color link</option>
+                            {colors.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
+              )}
+              {images.length > 0 && colors.length === 0 && (
+                <p className="text-xs text-muted-foreground">Tip: add colors in the “Variants & Stock” tab to link each photo to a color (so the storefront card can switch the image when a shopper picks a color).</p>
               )}
 
               {/* Per-image framing editor */}

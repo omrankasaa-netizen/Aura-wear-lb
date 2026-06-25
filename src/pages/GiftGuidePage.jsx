@@ -6,10 +6,10 @@ import { Gift, Filter } from 'lucide-react';
 import ProductCard from '@/components/storefront/ProductCard';
 
 const GIFT_CATEGORIES = [
-  { slug: 'newborn-essentials', name: 'Newborn Essentials', nameAr: 'ضروريات المواليد', ageGroup: 'Newborn' },
-  { slug: 'baby-favorites', name: 'Baby Favorites', nameAr: 'مفضلات الأطفال الرضع', ageGroup: 'Baby' },
-  { slug: 'toddler-gifts', name: 'Toddler Gifts', nameAr: 'هدايا الأطفال الصغار', ageGroup: 'Toddler' },
-  { slug: 'kid-classics', name: 'Kid Classics', nameAr: 'الكلاسيكيات للأطفال', ageGroup: 'Kids' },
+  { slug: 'for-her', name: 'For Her', nameAr: 'لها', gender: 'Women' },
+  { slug: 'for-him', name: 'For Him', nameAr: 'له', gender: 'Men' },
+  { slug: 'unisex-picks', name: 'Unisex Picks', nameAr: 'للجنسين', gender: 'Unisex' },
+  { slug: 'teens', name: 'Teens', nameAr: 'المراهقون', ageGroup: 'Teens' },
   { slug: 'under-25', name: 'Under $25', nameAr: 'أقل من 25 دولار', priceMax: 25 },
   { slug: 'under-50', name: 'Under $50', nameAr: 'أقل من 50 دولار', priceMax: 50 },
   { slug: 'luxury-picks', name: 'Luxury Picks', nameAr: 'الاختيارات الفاخرة', priceMin: 100 },
@@ -18,7 +18,7 @@ const GIFT_CATEGORIES = [
 
 export default function GiftGuidePage() {
   const { t, lang } = useLang();
-  const [selected, setSelected] = useState('newborn-essentials');
+  const [selected, setSelected] = useState('for-her');
 
   const { data: rawProducts = [] } = useQuery({
     queryKey: ['gift-guide-products'],
@@ -40,13 +40,16 @@ export default function GiftGuidePage() {
     cardImagesMap[id] = cardImagesMap[id]
       .slice()
       .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0) || (a.sort_order || 0) - (b.sort_order || 0))
-      .map(img => ({ url: img.url, focal: img.focal, crop: img.crop, alt: img.alt }));
+      .map(img => ({ url: img.url, focal: img.focal, crop: img.crop, alt: img.alt, color: img.color || '' }));
   }
   const products = rawProducts.map(p => ({ ...p, primaryImage: imgMap[p.id] || null, cardImages: cardImagesMap[p.id] || [] }));
 
   const selectedCat = GIFT_CATEGORIES.find(c => c.slug === selected);
 
   let filtered = products;
+  if (selectedCat?.gender) {
+    filtered = filtered.filter(p => p.gender === selectedCat.gender);
+  }
   if (selectedCat?.ageGroup) {
     filtered = filtered.filter(p => p.age_group === selectedCat.ageGroup);
   }
