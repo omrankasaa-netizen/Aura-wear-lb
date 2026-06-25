@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useLang } from '@/contexts/LanguageContext';
 import { useCart } from '@/contexts/CartContext';
@@ -70,6 +70,15 @@ export default function ProductPage() {
     enabled: !!product?.id,
   });
 
+  // When the shopper picks a color, jump the gallery to the first photo linked
+  // to that color (admins set the link per image in the product editor).
+  // Declared before the early return below to keep hook order stable.
+  useEffect(() => {
+    if (!selectedColor || images.length === 0) return;
+    const idx = images.findIndex(img => (img.color || '').toLowerCase() === selectedColor.toLowerCase());
+    if (idx >= 0) setImgIdx(idx);
+  }, [selectedColor, images]);
+
   if (!product) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -88,8 +97,17 @@ export default function ProductPage() {
   const originalPrice = discountedPrice ? product.price_usd : (hasCompareDiscount ? product.compare_at_price_usd : null);
   const pctOff = originalPrice ? Math.round((1 - displayPrice / originalPrice) * 100) : 0;
   const badgeLabel = autoDiscount ? (lang === 'ar' ? (autoDiscount.badge_label_ar || autoDiscount.badge_label) : autoDiscount.badge_label) : null;
-  const colors = product.colors ? product.colors.split('|').map(c => c.trim()).filter(Boolean) : [];
-  const sizes = product.sizes ? product.sizes.split('|').map(s => s.trim()).filter(Boolean) : [];
+  // Prefer the product's pipe-joined size/color strings, but fall back to the
+  // actual variant rows. This guarantees the pickers render for any variant
+  // product even if the legacy sizes/colors strings were never saved (older
+  // products created before the admin form persisted them) — otherwise the
+  // shopper would see no options and could never add the item to the cart.
+  const colors = product.colors
+    ? product.colors.split('|').map(c => c.trim()).filter(Boolean)
+    : [...new Set(variants.map(v => v.color).filter(Boolean))];
+  const sizes = product.sizes
+    ? product.sizes.split('|').map(s => s.trim()).filter(Boolean)
+    : [...new Set(variants.map(v => v.size).filter(Boolean))];
   const displayImages = images.length > 0 ? images : [];
 
   const selectedVariant = product.has_variants && variants.length > 0
@@ -98,9 +116,22 @@ export default function ProductPage() {
 
   const stockQty = selectedVariant ? (selectedVariant.qty_on_hand || 0) : (product.stock_quantity || 0);
   const needsSize = sizes.length > 0;
+  const needsColor = colors.length > 0;
+  // A variant product is only addable once the shopper has picked every option
+  // it offers (size and/or color) AND the resolved variant has stock. This is
+  // what blocks “add to cart” until variants are chosen.
+  const variantSelectionComplete =
+    (!needsSize || !!selectedSize) && (!needsColor || !!selectedColor);
   const canAdd = product.has_variants
-    ? !!selectedVariant && stockQty > 0
-    : (!needsSize || !!selectedSize) && stockQty > 0;
+    ? variantSelectionComplete && !!selectedVariant && stockQty > 0
+    : (!needsSize || !!selectedSize) && (!needsColor || !!selectedColor) && stockQty > 0;
+
+  // The single clearest reason the shopper can't add yet (for the button label).
+  const addBlockReason =
+    stockQty === 0 && (!product.has_variants || selectedVariant) ? 'stock'
+    : needsColor && !selectedColor ? 'color'
+    : needsSize && !selectedSize ? 'size'
+    : null;
 
   function handleAdd() {
     addItem(product, selectedVariant || null, qty);
@@ -237,7 +268,11 @@ export default function ProductPage() {
                 className={`w-full h-13 py-3.5 rounded-sm font-display uppercase tracking-[0.12em] text-xs font-semibold flex items-center justify-center gap-2 transition-colors
                   ${canAdd ? (added ? 'bg-success text-white' : 'bg-primary text-primary-foreground hover:bg-primary/90') : 'bg-secondary text-muted-foreground cursor-not-allowed'}`}>
                 <ShoppingBag className="w-4 h-4" />
-                {added ? t('Added to bag', 'أُضيف للسلة') : !canAdd && stockQty === 0 ? t('Out of stock', 'نفذ المخزون') : needsSize && !selectedSize ? t('Select a size', 'اختر مقاساً') : t('Add to bag', 'أضف للسلة')}
+                {added ? t('Added to bag', 'أُضيف للسلة')
+                  : addBlockReason === 'stock' ? t('Out of stock', 'نفذ المخزون')
+                  : addBlockReason === 'color' ? t('Select a color', 'اختر لوناً')
+                  : addBlockReason === 'size' ? t('Select a size', 'اختر مقاساً')
+                  : t('Add to bag', 'أضف للسلة')}
               </button>
               <button onClick={handleBuyNow} disabled={!canAdd}
                 className={`w-full h-13 py-3.5 rounded-sm font-display uppercase tracking-[0.12em] text-xs font-semibold border transition-colors ${canAdd ? 'border-foreground hover:bg-foreground hover:text-background' : 'border-border text-muted-foreground cursor-not-allowed'}`}>
@@ -301,7 +336,11 @@ export default function ProductPage() {
           className={`flex-1 h-12 rounded-sm font-display uppercase tracking-[0.12em] text-xs font-semibold flex items-center justify-center gap-2 transition-colors
             ${canAdd ? (added ? 'bg-success text-white' : 'bg-primary text-primary-foreground') : 'bg-secondary text-muted-foreground cursor-not-allowed'}`}>
           <ShoppingBag className="w-4 h-4" />
-          {added ? t('Added', 'أُضيف') : !canAdd && stockQty === 0 ? t('Sold out', 'نفذ') : needsSize && !selectedSize ? t('Select size', 'اختر مقاساً') : t('Add to bag', 'أضف للسلة')}
+          {added ? t('Added', 'أُضيف')
+            : addBlockReason === 'stock' ? t('Sold out', 'نفذ')
+            : addBlockReason === 'color' ? t('Select color', 'اختر لوناً')
+            : addBlockReason === 'size' ? t('Select size', 'اختر مقاساً')
+            : t('Add to bag', 'أضف للسلة')}
         </button>
       </div>
 

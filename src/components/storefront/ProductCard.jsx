@@ -10,6 +10,16 @@ import WishlistHeart from './WishlistHeart';
 import { BRAND, whatsappLink } from '@/lib/brand';
 import CardImageCarousel from './CardImageCarousel';
 
+// Swatch hex map (mirrors the product page) so the card swatches render real
+// colors. Unknown names fall back to a neutral grey.
+const COLOR_HEX = {
+  White: '#FFFFFF', Black: '#111111', Beige: '#E9E3DA', Cream: '#FAF8F4',
+  Blue: '#1F2A37', Navy: '#1F2A37', Olive: '#5A5E45', Grey: '#9CA3AF',
+  Brown: '#6B4F3A', Green: '#3B6E4D', Red: '#B23A2E', Charcoal: '#26262A',
+  Stone: '#D8D2C7', Khaki: '#9A8F73', Pink: '#E8B4B8', Sage: '#9CAF88',
+  Blush: '#E8C4C0', Yellow: '#E8D86A',
+};
+
 function Badge({ children, tone = 'dark' }) {
   const tones = {
     dark: 'bg-primary text-primary-foreground',
@@ -25,6 +35,7 @@ export default function ProductCard({ product }) {
   const { getProductDiscount, getDiscountedPrice } = useDiscounts();
   const settings = useSiteSettings();
   const [added, setAdded] = useState(false);
+  const [activeColor, setActiveColor] = useState(null);
 
   const name = lang === 'ar' ? (product.name_ar || product.name) : product.name;
   const isOutOfStock = (product.stock_quantity || 0) <= 0 && !product.has_variants;
@@ -48,6 +59,18 @@ export default function ProductCard({ product }) {
     ? product.cardImages
     : [primaryImg, secondImg].filter(Boolean).map(url => ({ url, alt: name }));
 
+  // Fix #4: let shoppers preview color variants right on the card. Colors come
+  // from the product's pipe-joined `colors` string. Picking a swatch jumps the
+  // card carousel to the first photo whose `color` matches (admins link photos
+  // to colors in the product editor). Only show swatches when at least one card
+  // photo is actually linked to a color, so we never show dead swatches.
+  const cardColors = (product.colors ? product.colors.split('|').map(c => c.trim()).filter(Boolean) : []);
+  const colorHasPhoto = (c) => cardImages.some(im => (im.color || '').toLowerCase() === c.toLowerCase());
+  const swatchColors = cardColors.filter(colorHasPhoto);
+  const colorJumpIndex = activeColor
+    ? cardImages.findIndex(im => (im.color || '').toLowerCase() === activeColor.toLowerCase())
+    : null;
+
   function handleAdd(e) {
     e.preventDefault();
     if (isOutOfStock || product.has_variants) return;
@@ -63,7 +86,7 @@ export default function ProductCard({ product }) {
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="group">
       <Link to={`/product/${product.slug}`} className="block">
         <div className="relative aspect-[3/4] bg-secondary overflow-hidden rounded-sm">
-          <CardImageCarousel images={cardImages} fallbackAlt={name} rtl={lang === 'ar'} />
+          <CardImageCarousel images={cardImages} fallbackAlt={name} rtl={lang === 'ar'} jumpToIndex={colorJumpIndex} />
 
           {/* Badges */}
           <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
@@ -103,6 +126,25 @@ export default function ProductCard({ product }) {
         <div className="pt-3">
           {fit && <p className="eyebrow text-muted-foreground text-[10px] mb-1">{fit}</p>}
           <p className="text-sm font-medium leading-snug line-clamp-1">{name}</p>
+
+          {/* Color swatches — hover/click swaps the card photo to that color */}
+          {swatchColors.length > 1 && (
+            <div className="flex items-center gap-1.5 mt-1.5" onClick={(e) => e.preventDefault()}>
+              {swatchColors.slice(0, 6).map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  title={c}
+                  aria-label={c}
+                  onMouseEnter={() => setActiveColor(c)}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveColor(c); }}
+                  className={`w-4 h-4 rounded-full border transition-all ${activeColor === c ? 'ring-1 ring-foreground ring-offset-1 ring-offset-background border-transparent' : 'border-stone hover:border-foreground'}`}
+                  style={{ backgroundColor: COLOR_HEX[c] || '#999' }}
+                />
+              ))}
+              {swatchColors.length > 6 && <span className="text-[10px] text-muted-foreground">+{swatchColors.length - 6}</span>}
+            </div>
+          )}
           <div className="flex items-baseline gap-2 mt-1">
             <span className={`text-sm font-semibold tabular-nums ${hasDiscount ? 'text-sale' : 'text-foreground'}`}>${displayPrice?.toFixed(2)}</span>
             {originalPrice && <span className="text-xs text-muted-foreground line-through tabular-nums">${originalPrice?.toFixed(2)}</span>}

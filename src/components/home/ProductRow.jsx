@@ -36,7 +36,7 @@ export default function ProductRow({ title, titleAr, filter, viewAllLink }) {
     cardImagesMap[id] = cardImagesMap[id]
       .slice()
       .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0) || (a.sort_order || 0) - (b.sort_order || 0))
-      .map(img => ({ url: img.url, variants: img.variants, focal: img.focal, crop: img.crop, alt: img.alt }));
+      .map(img => ({ url: img.url, variants: img.variants, focal: img.focal, crop: img.crop, alt: img.alt, color: img.color || '' }));
   }
 
   const products = rawProducts.map(p => ({ ...p, primaryImage: imgMap[p.id] || null, cardImages: cardImagesMap[p.id] || [] }));
