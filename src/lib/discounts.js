@@ -44,8 +44,10 @@ function discountMatchesProduct(d, product) {
       return tags.includes((d.target || '').toLowerCase());
     }
     case 'specific_products': {
-      const ids = (d.target || '').split(',').map(s => s.trim());
-      return ids.includes(product.id);
+      const targets = (d.target || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      const id = String(product.id || '').trim().toLowerCase();
+      const sku = String(product.sku || '').trim().toLowerCase();
+      return (!!id && targets.includes(id)) || (!!sku && targets.includes(sku));
     }
     default: return false;
   }
