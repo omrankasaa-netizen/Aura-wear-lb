@@ -469,15 +469,17 @@ export default function CheckoutPage() {
             <div className="border border-border rounded-sm p-5 space-y-3">
               <h2 className="font-display uppercase tracking-wide text-sm">{t('Contact', 'التواصل')}</h2>
               {[
-                { k: 'customer_name', label: t('Full Name *', 'الاسم الكامل *'), required: true },
-                { k: 'customer_phone', label: t('Phone *', 'الهاتف *'), required: true, type: 'tel' },
-                { k: 'customer_email', label: t('Email *', 'البريد الإلكتروني *'), required: true, type: 'email', readOnly: !!currentUser },
-              ].map(({ k, label, required, type, readOnly }) => (
+                { k: 'customer_name', label: t('Full Name *', 'الاسم الكامل *'), required: true, autoComplete: 'name' },
+                { k: 'customer_phone', label: t('Phone *', 'الهاتف *'), required: true, type: 'tel', inputMode: 'tel', autoComplete: 'tel' },
+                { k: 'customer_email', label: t('Email *', 'البريد الإلكتروني *'), required: true, type: 'email', inputMode: 'email', autoComplete: 'email', readOnly: !!currentUser },
+              ].map(({ k, label, required, type, inputMode, autoComplete, readOnly }) => (
                 <div key={k}>
                   <label className="text-xs text-muted-foreground block mb-1">{label}</label>
                   <input
                     required={required}
                     type={type || 'text'}
+                    inputMode={inputMode}
+                    autoComplete={autoComplete}
                     readOnly={readOnly}
                     value={form[k]}
                     onChange={e => { setF(k, e.target.value); if (k === 'customer_phone') setPhoneError(''); }}
@@ -523,14 +525,14 @@ export default function CheckoutPage() {
                 </div>
               </div>
               {[
-                { k: 'street', label: t('Street', 'الشارع') },
-                { k: 'building', label: t('Building', 'البناية') },
+                { k: 'street', label: t('Street', 'الشارع'), autoComplete: 'address-line1' },
+                { k: 'building', label: t('Building', 'البناية'), autoComplete: 'address-line2' },
                 { k: 'floor', label: t('Floor (optional)', 'الطابق (اختياري)') },
                 { k: 'landmark', label: t('Landmark (optional)', 'علامة مميزة (اختياري)') },
-              ].map(({ k, label }) => (
+              ].map(({ k, label, autoComplete }) => (
                 <div key={k}>
                   <label className="text-xs text-muted-foreground block mb-1">{label}</label>
-                  <input value={form[k]} onChange={e => setF(k, e.target.value)} className={inputCls} />
+                  <input value={form[k]} onChange={e => setF(k, e.target.value)} autoComplete={autoComplete} className={inputCls} />
                 </div>
               ))}
             </div>
