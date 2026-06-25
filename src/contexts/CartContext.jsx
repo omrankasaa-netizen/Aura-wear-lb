@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useDiscounts } from '@/contexts/DiscountContext';
+import { applyDiscountToPrice } from '@/lib/discounts';
 
 const CartContext = createContext();
 const STORAGE_KEY = 'aura-cart';
@@ -53,11 +55,22 @@ export function CartProvider({ children }) {
 
   function clearCart() { setItems([]); }
 
-  const totalQty = items.reduce((s, i) => s + i.quantity, 0);
-  const subtotal = items.reduce((s, i) => s + (parseFloat(i.price) || 0) * i.quantity, 0);
+  // Resolve auto-discounts live so the cart never freezes a stale add-time price.
+  // Variant price (stored as `price`) is the BASE; the auto-discount applies on top,
+  // using the same logic the storefront badge uses so badge price == cart price.
+  const { getProductDiscount } = useDiscounts();
+  const pricedItems = items.map(item => {
+    const rawPrice = parseFloat(item.price ?? item.variant?.price_usd ?? item.product?.price_usd ?? 0) || 0;
+    const discount = getProductDiscount ? getProductDiscount(item.product) : null;
+    const price = discount ? applyDiscountToPrice(discount, rawPrice) : rawPrice;
+    return { ...item, rawPrice, price, discount };
+  });
+
+  const totalQty = pricedItems.reduce((s, i) => s + i.quantity, 0);
+  const subtotal = pricedItems.reduce((s, i) => s + (parseFloat(i.price) || 0) * i.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQty, clearCart, totalQty, subtotal, isOpen, setIsOpen }}>
+    <CartContext.Provider value={{ items: pricedItems, addItem, removeItem, updateQty, clearCart, totalQty, subtotal, isOpen, setIsOpen }}>
       {children}
     </CartContext.Provider>
   );

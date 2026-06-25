@@ -152,20 +152,20 @@ function App() {
     <ErrorBoundary>
       <AuthProvider>
         <LanguageProvider>
-          <CartProvider>
-            <AuthUserProvider>
-              <WishlistProvider>
-                <QueryClientProvider client={queryClientInstance}>
-                  <DiscountProvider>
+          <AuthUserProvider>
+            <WishlistProvider>
+              <QueryClientProvider client={queryClientInstance}>
+                <DiscountProvider>
+                  <CartProvider>
                     <Router>
                       <AuthenticatedApp />
                     </Router>
                     <Toaster />
-                  </DiscountProvider>
-                </QueryClientProvider>
-              </WishlistProvider>
-            </AuthUserProvider>
-          </CartProvider>
+                  </CartProvider>
+                </DiscountProvider>
+              </QueryClientProvider>
+            </WishlistProvider>
+          </AuthUserProvider>
         </LanguageProvider>
       </AuthProvider>
     </ErrorBoundary>
