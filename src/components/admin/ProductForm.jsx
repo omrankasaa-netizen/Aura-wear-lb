@@ -172,11 +172,20 @@ export default function ProductForm({ product, categories, onClose, onSaved, clo
     // overwrite edits the admin has made but not yet saved.
     if (!variantsFetched || variantsInitRef.current === (sourceId ?? null)) return;
     variantsInitRef.current = sourceId ?? null;
+    // Seed size/color chips from the variant rows when they exist...
+    const fromVariantSizes = [...new Set(existingVariants.map(v => v.size).filter(Boolean))];
+    const fromVariantColors = [...new Set(existingVariants.map(v => v.color).filter(Boolean))];
+    // ...but also fall back to the product's saved pipe-joined strings, so a
+    // product that has colors/sizes saved (but no ProductVariant rows yet) still
+    // populates the chips. Without this, the per-image color dropdown in the
+    // Images tab shows up empty and photos can't be linked to a color.
+    const fromStringSizes = (form.sizes || '').split('|').map(s => s.trim()).filter(Boolean);
+    const fromStringColors = (form.colors || '').split('|').map(c => c.trim()).filter(Boolean);
+    const mergedSizes = [...new Set([...fromVariantSizes, ...fromStringSizes])];
+    const mergedColors = [...new Set([...fromVariantColors, ...fromStringColors])];
+    if (mergedSizes.length > 0) setSizes(mergedSizes);
+    if (mergedColors.length > 0) setColors(mergedColors);
     if (existingVariants.length > 0) {
-      const uniqueSizes = [...new Set(existingVariants.map(v => v.size).filter(Boolean))];
-      const uniqueColors = [...new Set(existingVariants.map(v => v.color).filter(Boolean))];
-      setSizes(uniqueSizes);
-      setColors(uniqueColors);
       const grid = {};
       for (const v of existingVariants) {
         const key = `${v.size || ''}__${v.color || ''}`;
@@ -185,7 +194,7 @@ export default function ProductForm({ product, categories, onClose, onSaved, clo
       }
       setVariantGrid(grid);
     }
-  }, [variantsFetched, existingVariants, sourceId, isClone]);
+  }, [variantsFetched, existingVariants, sourceId, isClone, form.sizes, form.colors]);
 
   useEffect(() => {
     if (!imagesFetched || imagesInitRef.current === (sourceId ?? null)) return;
