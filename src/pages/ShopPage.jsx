@@ -101,7 +101,7 @@ export default function ShopPage() {
       m[id] = m[id]
         .slice()
         .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0) || (a.sort_order || 0) - (b.sort_order || 0))
-        .map(img => ({ url: img.url, variants: img.variants, focal: img.focal, crop: img.crop, alt: img.alt }));
+        .map(img => ({ url: img.url, variants: img.variants, focal: img.focal, crop: img.crop, alt: img.alt, color: img.color || '' }));
     }
     return m;
   }, [images]);

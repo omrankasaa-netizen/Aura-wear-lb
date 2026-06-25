@@ -31,7 +31,7 @@ export default function WishlistPage() {
         cardImagesMap[id] = cardImagesMap[id]
           .slice()
           .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0) || (a.sort_order || 0) - (b.sort_order || 0))
-          .map(img => ({ url: img.url, focal: img.focal, crop: img.crop, alt: img.alt }));
+          .map(img => ({ url: img.url, focal: img.focal, crop: img.crop, alt: img.alt, color: img.color || '' }));
       }
       return prods
         .filter(p => wishlistIds.includes(p.id))

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { frameImageStyle, cmsImageSrc, handleImageError } from '@/lib/imageFraming';
 
@@ -11,9 +11,14 @@ import { frameImageStyle, cmsImageSrc, handleImageError } from '@/lib/imageFrami
 // Each photo is center-cropped to 3:4 and honors its own focal/crop metadata.
 // Single-image products render no controls. Arrows/dots stopPropagation so they
 // never trigger the parent <Link> navigation.
-export default function CardImageCarousel({ images, fallbackAlt = '', rtl = false }) {
+export default function CardImageCarousel({ images, fallbackAlt = '', rtl = false, jumpToIndex = null }) {
   const [index, setIndex] = useState(0);
   const touchStartX = useRef(null);
+
+  // Allow a parent (e.g. a color swatch on the card) to drive which photo shows.
+  useEffect(() => {
+    if (jumpToIndex != null && jumpToIndex >= 0) setIndex(jumpToIndex);
+  }, [jumpToIndex]);
 
   const pics = (images || []).filter(im => im && im.url);
   const count = pics.length;

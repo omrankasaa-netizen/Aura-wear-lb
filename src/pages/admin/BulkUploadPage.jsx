@@ -14,50 +14,50 @@ const INSTRUCTIONS_COMMENT = [
   '=== INSTRUCTIONS — DELETE THIS ROW BEFORE UPLOADING ===',
   'Arabic name','Short EN description (1 line)','Short AR description','Long EN description','Long AR description',
   'Category name (must match existing or will be created)',
-  'Girls / Boys / Unisex','Newborn / Baby / Toddler / Kids',
-  'Price per piece e.g. 12.99','Original price if on sale e.g. 15.99 (leave blank if not on sale)',
-  'Your cost/landed price e.g. 5.00',
-  'SIZES: use pipe | to separate — e.g. NB|3M|6M|12M — leave blank if no size options',
-  'COLORS: use pipe | to separate — e.g. White|Pink|Mint — leave blank if no color options',
+  'Women / Men / Unisex','Adults / Teens',
+  'Price per piece e.g. 29.99','Original price if on sale e.g. 39.99 (leave blank if not on sale)',
+  'Your cost/landed price e.g. 12.00',
+  'SIZES: use pipe | to separate — e.g. XS|S|M|L|XL — leave blank if no size options',
+  'COLORS: use pipe | to separate — e.g. Black|White|Beige — leave blank if no color options',
   'Total stock quantity (number only)','Your product code / SKU',
   'Comma-separated tags','TRUE or FALSE','TRUE or FALSE','Active or Hidden'
 ];
 
 const SAMPLE_ROW_1 = [
-  'Bunny Bodysuit','بدلة أرنب',
-  'Cute bunny print onesie','بودي سوت ببطبع أرنب',
-  'Soft 100% cotton onesie with bunny print. Perfect for newborns.',
-  'قطعة قطنية ناعمة 100% مع طبعة أرنب. مثالية للمواليد.',
-  'Bodysuits','Girls','Newborn',
-  '12.99','15.99','5.00',
-  'NB|3M|6M|12M','White|Pink|Mint',
-  '20','BNNY-001','cotton,onesie,newborn','TRUE','FALSE','Active'
+  'Oversized Cotton Tee','تيشيرت قطن واسع',
+  'Relaxed everyday tee','تيشيرت يومي مريح',
+  'Soft 100% cotton oversized t-shirt. An everyday essential.',
+  'تيشيرت قطني واسع 100%. قطعة أساسية لكل يوم.',
+  'T-Shirts','Women','Adults',
+  '29.99','39.99','12.00',
+  'XS|S|M|L|XL','White|Black|Beige',
+  '40','TEE-001','cotton,tee,basics','TRUE','FALSE','Active'
 ];
 
 const SAMPLE_ROW_2 = [
-  'Snap Pajama Set','طقم بيجاما بكبسات',
-  'Cozy sleepwear for sweeter nights','لبس نوم ناعم لليالي أهدأ',
-  'Soft cotton-blend snap pajama set. Great for gifting.',
-  'طقم بيجاما ناعم ومريح. هدية رائعة.',
-  'Sleepwear','Unisex','Baby',
-  '15.99','','3.64',
-  '0-3M|3-6M|6-9M|9-12M','Beige|Gray',
-  '12','PJM-001','sleepwear,baby,gift','TRUE','TRUE','Active'
+  'Slim Fit Chino','بنطلون تشينو ضيق',
+  'Smart-casual stretch chino','تشينو مرن أنيق',
+  'Comfortable stretch cotton chino with a slim fit.',
+  'بنطلون تشينو قطني مرن بقصّة ضيّقة ومريحة.',
+  'Trousers','Men','Adults',
+  '44.99','','18.00',
+  'S|M|L|XL|XXL','Navy|Olive|Stone',
+  '25','CHN-001','chino,trousers,smart-casual','TRUE','TRUE','Active'
 ];
 
 const SAMPLE_ROW_3 = [
-  'Braided Ski Cap','طاقية مكرّمة',
-  'Cozy winter cap for little ones','طاقية شتوية دافئة للصغار',
-  'Soft knit braided ski cap. One size fits most babies.',
-  'طاقية مكرّمة ناعمة. مقاس واحد يناسب معظم الأطفال.',
-  'Accessories','Unisex','Baby',
-  '8.99','','2.50',
-  '','Ecru|Sage|Pink',
-  '8','CAP-001','accessories,winter,cap','FALSE','FALSE','Active'
+  'Knit Beanie','طاقية صوف',
+  'Cozy ribbed beanie','طاقية مضلّعة دافئة',
+  'Soft ribbed knit beanie. One size fits most.',
+  'طاقية صوف مضلّعة ناعمة. مقاس واحد يناسب الجميع.',
+  'Accessories','Unisex','Adults',
+  '18.99','','6.00',
+  '','Charcoal|Grey|Brown',
+  '30','BEA-001','accessories,winter,beanie','FALSE','FALSE','Active'
 ];
 
-const VALID_GENDERS = ['Girls', 'Boys', 'Unisex'];
-const VALID_AGES = ['Newborn', 'Baby', 'Toddler', 'Kids'];
+const VALID_GENDERS = ['Women', 'Men', 'Unisex'];
+const VALID_AGES = ['Adults', 'Teens'];
 const VALID_STATUS = ['Active', 'Hidden'];
 const VALID_BOOLS = ['TRUE', 'FALSE', 'true', 'false', '1', '0', ''];
 
