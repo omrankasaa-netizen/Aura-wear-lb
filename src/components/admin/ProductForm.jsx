@@ -593,11 +593,12 @@ export default function ProductForm({ product, categories, onClose, onSaved, clo
               {images.length > 0 && (
                 <div className="grid grid-cols-3 gap-3">
                   {images.map((img, idx) => (
-                    <div key={idx} className={`relative rounded-xl overflow-hidden border-2 transition-colors ${img.is_primary ? 'border-primary' : 'border-border'}`}>
-                      {/* Thumb reflects the 3:4 card framing so admins preview crop/focal inline */}
+                    <div key={idx} className={`rounded-xl overflow-hidden border-2 transition-colors ${img.is_primary ? 'border-primary' : 'border-border'}`}>
+                      {/* Image + hover overlay live in their OWN relative box so the
+                          full-bleed overlay no longer sits on top of the color
+                          selector below (which made the dropdown un-clickable). */}
                       <div className="relative w-full aspect-[3/4] bg-secondary overflow-hidden">
                         <img src={img.url} alt="" style={frameImageStyle(img.focal, img.crop)} draggable={false} />
-                      </div>
                       <div className="absolute inset-0 bg-black/0 hover:bg-black/40 transition-colors flex items-center justify-center gap-1.5 opacity-0 hover:opacity-100">
                         <button type="button" onClick={() => setPrimary(idx)} title="Set as primary"
                           className="p-1.5 bg-white rounded-full shadow hover:bg-amber-50">
@@ -615,9 +616,13 @@ export default function ProductForm({ product, categories, onClose, onSaved, clo
                       {img.is_primary && (
                         <span className="absolute top-1.5 left-1.5 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full">Primary</span>
                       )}
+                      {img.color && (
+                        <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-full">{img.color}</span>
+                      )}
                       {(img.crop || (img.focal && (img.focal.x !== 0.5 || img.focal.y !== 0.5))) && (
                         <span className="absolute bottom-1.5 right-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-full">Framed</span>
                       )}
+                      </div>
                       {/* Link this photo to a color so the storefront card can
                           show it when a shopper selects that color swatch. */}
                       {colors.length > 0 && (
@@ -650,6 +655,21 @@ export default function ProductForm({ product, categories, onClose, onSaved, clo
                     crop={images[editingImageIdx].crop}
                     onChange={(framing) => setImageFraming(editingImageIdx, framing)}
                   />
+                  {/* Also surface the color link here so it's reachable from the
+                      same panel as crop/focal editing. */}
+                  <div className="mt-4 pt-3 border-t border-border">
+                    <label className="block text-sm font-medium text-foreground mb-1.5">Link this photo to a color</label>
+                    {colors.length > 0 ? (
+                      <select value={images[editingImageIdx].color || ''} onChange={e => setImageColor(editingImageIdx, e.target.value)}
+                        className="w-full text-sm px-3 py-2 rounded-lg border border-input bg-background text-foreground outline-none focus:ring-1 focus:ring-ring">
+                        <option value="">No color link</option>
+                        {colors.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Add colors in the “Variants &amp; Stock” tab first, then choose one here.</p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1.5">The storefront card shows this photo when a shopper picks this color.</p>
+                  </div>
                 </div>
               )}
             </div>
