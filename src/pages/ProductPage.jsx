@@ -10,6 +10,7 @@ import WishlistHeart from '@/components/storefront/WishlistHeart';
 import { ReviewList, ReviewForm } from '@/components/storefront/ReviewCard';
 import { BRAND, whatsappLink } from '@/lib/brand';
 import { imageSrc, handleImageError } from '@/lib/imageFraming';
+import ImageLightbox from '@/components/storefront/ImageLightbox';
 
 function Accordion({ title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -33,6 +34,7 @@ export default function ProductPage() {
   const [selectedSize, setSelectedSize] = useState('');
   const [qty, setQty] = useState(1);
   const [imgIdx, setImgIdx] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [added, setAdded] = useState(false);
   const [sizeHelpOpen, setSizeHelpOpen] = useState(false);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
@@ -152,12 +154,14 @@ export default function ProductPage() {
           <span className="text-foreground truncate max-w-[200px]">{name}</span>
         </nav>
 
-        <div className="grid lg:grid-cols-2 gap-6 lg:gap-12">
+        <div className="grid lg:grid-cols-[3fr_2fr] gap-6 lg:gap-12 items-start">
           {/* Gallery */}
           <div className="space-y-3">
-            <div className="relative aspect-[4/5] bg-secondary rounded-sm overflow-hidden">
+            <div className="relative aspect-[3/4] bg-secondary rounded-sm overflow-hidden">
               {displayImages.length > 0 ? (
-                <img src={imageSrc(displayImages[imgIdx], 'large')} alt={name} loading="eager" decoding="async" onError={handleImageError} className="w-full h-full object-cover" />
+                <img src={imageSrc(displayImages[imgIdx], 'large')} alt={name} loading="eager" decoding="async" onError={handleImageError}
+                  onClick={() => setLightboxOpen(true)}
+                  className="w-full h-full object-cover cursor-zoom-in" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <img src="/brand/aura-mark.png" alt="" className="w-16 h-16 opacity-20" />
@@ -371,6 +375,17 @@ export default function ProductPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Full-screen photo popup (tap/click the main gallery image to open). */}
+      {lightboxOpen && displayImages.length > 0 && (
+        <ImageLightbox
+          images={displayImages}
+          startIndex={imgIdx}
+          alt={name}
+          rtl={lang === 'ar'}
+          onClose={() => setLightboxOpen(false)}
+        />
       )}
     </div>
   );
