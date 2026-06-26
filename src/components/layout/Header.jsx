@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useLang } from '@/contexts/LanguageContext';
 import { useCart } from '@/contexts/CartContext';
 import { useAuthUser } from '@/contexts/AuthUserContext';
@@ -28,6 +29,15 @@ export default function Header() {
   }, []);
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+
+  // Lock body scroll while the mobile drawer is open.
+  useEffect(() => {
+    if (mobileOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [mobileOpen]);
 
   const tier = customer?.current_tier || customer?.membership_tier;
 
@@ -121,11 +131,12 @@ export default function Header() {
         )}
       </div>
 
-      {/* Mobile nav drawer */}
-      {mobileOpen && (
-        <>
-          <div className="fixed inset-0 bg-black/50 z-50 lg:hidden animate-in fade-in duration-200" onClick={() => setMobileOpen(false)} />
-          <div className="fixed left-0 top-0 bottom-0 w-[85%] max-w-xs bg-background z-50 lg:hidden flex flex-col shadow-2xl animate-in slide-in-from-left duration-300">
+      {/* Mobile nav drawer — rendered via a portal to <body> so it escapes the
+          sticky header's stacking context (backdrop-blur was trapping it). */}
+      {mobileOpen && createPortal(
+        <div className="lg:hidden" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+          <div className="fixed inset-0 bg-black/50 z-[100] animate-in fade-in duration-200" onClick={() => setMobileOpen(false)} />
+          <div className="fixed left-0 rtl:left-auto rtl:right-0 top-0 bottom-0 w-[85%] max-w-xs bg-background z-[101] flex flex-col shadow-2xl animate-in slide-in-from-left rtl:slide-in-from-right duration-300">
             <div className="flex items-center justify-between h-16 px-4 border-b border-border">
               <img src={LOGO.dark} alt="AURA" className="h-6 w-auto" />
               <button onClick={() => setMobileOpen(false)} className="w-10 h-10 flex items-center justify-center -mr-2"><X className="w-5 h-5" /></button>
@@ -150,7 +161,8 @@ export default function Header() {
               {currentUser ? t('My Account', 'حسابي') : t('Sign In', 'تسجيل الدخول')}
             </Link>
           </div>
-        </>
+        </div>,
+        document.body
       )}
     </header>
   );
