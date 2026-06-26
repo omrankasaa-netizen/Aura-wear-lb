@@ -9,7 +9,6 @@ import { motion } from 'framer-motion';
 import WishlistHeart from './WishlistHeart';
 import { BRAND, whatsappLink } from '@/lib/brand';
 import CardImageCarousel from './CardImageCarousel';
-import ImageLightbox from './ImageLightbox';
 
 function Badge({ children, tone = 'dark' }) {
   const tones = {
@@ -27,7 +26,6 @@ export default function ProductCard({ product }) {
   const settings = useSiteSettings();
   const [added, setAdded] = useState(false);
   const [activeColor, setActiveColor] = useState(null);
-  const [lightboxIndex, setLightboxIndex] = useState(null); // null = closed
 
   const name = lang === 'ar' ? (product.name_ar || product.name) : product.name;
   const isOutOfStock = (product.stock_quantity || 0) <= 0 && !product.has_variants;
@@ -78,8 +76,7 @@ export default function ProductCard({ product }) {
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="group">
       <Link to={`/product/${product.slug}`} className="block">
         <div className="relative aspect-[3/4] bg-secondary overflow-hidden rounded-sm">
-          <CardImageCarousel images={cardImages} fallbackAlt={name} rtl={lang === 'ar'} jumpToIndex={colorJumpIndex}
-            onImageClick={(i) => setLightboxIndex(i)} />
+          <CardImageCarousel images={cardImages} fallbackAlt={name} rtl={lang === 'ar'} jumpToIndex={colorJumpIndex} />
 
           {/* Badges */}
           <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
@@ -147,17 +144,6 @@ export default function ProductCard({ product }) {
           </div>
         </div>
       </Link>
-
-      {/* Tap-to-zoom preview overlay (opens from the card image, not the Link). */}
-      {lightboxIndex != null && (
-        <ImageLightbox
-          images={cardImages}
-          startIndex={lightboxIndex}
-          alt={name}
-          rtl={lang === 'ar'}
-          onClose={() => setLightboxIndex(null)}
-        />
-      )}
     </motion.div>
   );
 }
