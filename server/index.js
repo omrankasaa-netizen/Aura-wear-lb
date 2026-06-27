@@ -22,6 +22,7 @@ import {
 } from './adminTools.js';
 import { sendEmail } from './email.js';
 import { runSeed } from './seed.js';
+import { repairDuplicateSlugs } from './repairSlugs.js';
 import { optimizeAndStore, bufferFromBase64 } from './imageOptimize.js';
 
 // Build the verification-code email HTML.
@@ -44,6 +45,9 @@ const PORT = process.env.PORT || 4000;
 
 initSchema();
 runSeed();
+// Repair any pre-existing duplicate product slugs so each product page resolves
+// to the correct item. Idempotent — a no-op once slugs are unique.
+repairDuplicateSlugs();
 
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
