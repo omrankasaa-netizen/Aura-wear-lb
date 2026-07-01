@@ -10,10 +10,53 @@ import { isDiscountLive } from '@/lib/discounts';
 
 const EMPTY = { name: '', name_ar: '', type: 'percentage', value: '', applies_to: 'all_products', target: '', starts_at: '', ends_at: '', is_active: true, badge_label: 'SALE', badge_label_ar: 'تخفيض' };
 
+// datetime-local <-> ISO conversion. The <input type="datetime-local"> value is
+// a local-time string (YYYY-MM-DDTHH:mm); we persist UTC ISO. Slicing a UTC ISO
+// directly would show/store the wrong wall-clock time, so account for the offset.
+function isoToDatetimeLocal(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const tzMs = d.getTime() - d.getTimezoneOffset() * 60000;
+  return new Date(tzMs).toISOString().slice(0, 16);
+}
+function datetimeLocalToIso(val) {
+  if (!val) return '';
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString();
+}
+
 function DiscountModal({ initial, onClose, onSave }) {
   const [form, setForm] = useState(initial || EMPTY);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
-  const toDatetimeLocal = (iso) => iso ? iso.slice(0, 16) : '';
+
+  function validate() {
+    if (!form.name || !form.name.trim()) return 'Name (EN) is required.';
+    if (!(Number(form.value) > 0)) return 'Value must be greater than 0.';
+    if (form.starts_at && form.ends_at && new Date(form.ends_at) < new Date(form.starts_at)) {
+      return 'End date must be on or after the start date.';
+    }
+    return '';
+  }
+
+  async function handleSubmit() {
+    const msg = validate();
+    if (msg) { setError(msg); return; }
+    setError('');
+    setSaving(true);
+    try {
+      await onSave(form);
+      onClose();
+    } catch (err) {
+      setError(err?.message || 'Failed to save discount. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
       <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
@@ -66,20 +109,21 @@ function DiscountModal({ initial, onClose, onSave }) {
           )}
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Starts At</label>
-            <input type="datetime-local" value={toDatetimeLocal(form.starts_at)} onChange={e=>f('starts_at',e.target.value?new Date(e.target.value).toISOString():'')} className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm" />
+            <input type="datetime-local" value={isoToDatetimeLocal(form.starts_at)} onChange={e=>f('starts_at',datetimeLocalToIso(e.target.value))} className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Ends At</label>
-            <input type="datetime-local" value={toDatetimeLocal(form.ends_at)} onChange={e=>f('ends_at',e.target.value?new Date(e.target.value).toISOString():'')} className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm" />
+            <input type="datetime-local" value={isoToDatetimeLocal(form.ends_at)} onChange={e=>f('ends_at',datetimeLocalToIso(e.target.value))} className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm" />
           </div>
           <div className="col-span-2 flex items-center gap-2">
             <input type="checkbox" id="disc_active" checked={!!form.is_active} onChange={e=>f('is_active',e.target.checked)} className="rounded" />
             <label htmlFor="disc_active" className="text-sm text-foreground">Active</label>
           </div>
         </div>
+        {error && <p className="text-sm text-destructive bg-destructive/10 rounded-xl px-3 py-2">{error}</p>}
         <div className="flex gap-3 pt-2">
-          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-border text-sm">Cancel</button>
-          <button onClick={()=>onSave(form)} className="flex-1 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold">Save</button>
+          <button onClick={onClose} disabled={saving} className="flex-1 py-2 rounded-xl border border-border text-sm disabled:opacity-50">Cancel</button>
+          <button onClick={handleSubmit} disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold disabled:opacity-60">{saving ? 'Saving…' : 'Save'}</button>
         </div>
       </div>
     </div>
@@ -98,31 +142,47 @@ export default function DiscountsPage() {
 
   if (!canAccess('manage_discounts')) return <AdminLayout><AccessDenied /></AdminLayout>;
 
+  async function refreshDiscounts() {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['all-discounts'] }),
+      qc.invalidateQueries({ queryKey: ['active-discounts'] }),
+    ]);
+  }
+
+  // Throws on failure so the modal can surface the error and stay open. The
+  // modal closes itself only after this resolves.
   async function handleSave(form) {
+    const id = form.id || form._id;
     const data = { ...form, value: Number(form.value) || 0 };
-    if (form.id) {
-      await base44.entities.Discount.update(form.id, data);
-      await logAction({ action: 'updated', entity: 'Discount', entity_id: form.id, details: form.name, userName: currentUser?.email });
+    if (id) {
+      await base44.entities.Discount.update(id, data);
+      await logAction({ action: 'updated', entity: 'Discount', entity_id: id, details: form.name, userName: currentUser?.email });
     } else {
       await base44.entities.Discount.create(data);
       await logAction({ action: 'created', entity: 'Discount', details: form.name, userName: currentUser?.email });
     }
-    qc.invalidateQueries({ queryKey: ['all-discounts'] });
-    qc.invalidateQueries({ queryKey: ['active-discounts'] });
-    setModal(null);
+    await refreshDiscounts();
   }
 
   async function toggleActive(d) {
-    await base44.entities.Discount.update(d.id, { is_active: !d.is_active });
-    qc.invalidateQueries({ queryKey: ['all-discounts'] });
-    qc.invalidateQueries({ queryKey: ['active-discounts'] });
+    const id = d.id || d._id;
+    try {
+      await base44.entities.Discount.update(id, { is_active: !d.is_active });
+      await refreshDiscounts();
+    } catch (err) {
+      alert(err?.message || 'Failed to update discount status.');
+    }
   }
 
   async function handleDelete(d) {
     if (!confirm(`Delete discount "${d.name}"?`)) return;
-    await base44.entities.Discount.delete(d.id);
-    qc.invalidateQueries({ queryKey: ['all-discounts'] });
-    qc.invalidateQueries({ queryKey: ['active-discounts'] });
+    const id = d.id || d._id;
+    try {
+      await base44.entities.Discount.delete(id);
+      await refreshDiscounts();
+    } catch (err) {
+      alert(err?.message || 'Failed to delete discount.');
+    }
   }
 
   const now = new Date();
@@ -175,7 +235,7 @@ export default function DiscountsPage() {
                 {discounts.map(d => {
                   const st = discStatus(d);
                   return (
-                    <tr key={d.id} className="hover:bg-muted/20 transition-colors">
+                    <tr key={d.id || d._id} className="hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-3">
                         <p className="font-semibold text-foreground">{d.name}</p>
                         {d.name_ar && <p className="text-xs text-muted-foreground" dir="rtl">{d.name_ar}</p>}
