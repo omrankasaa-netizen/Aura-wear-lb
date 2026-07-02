@@ -1,0 +1,16 @@
+# Gitleaks configuration for Aura-wear-lb.
+# Extends the built-in default ruleset (covers Resend, AWS, generic API keys, etc.).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist documentation placeholders and example env values."
+regexes = [
+  '''re_your_resend_api_key''',
+  '''your_resend_api_key_here''',
+  '''your_r2_access_key_id''',
+  '''your_r2_secret_access_key''',
+]
+paths = [
+  '''\.env\.example$''',
+]
