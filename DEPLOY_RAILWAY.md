@@ -42,13 +42,14 @@ In your Railway service → **Variables**, add:
 | Variable | Value |
 |---|---|
 | `MINIYO_DB_PATH` | `/data/data.db` |
-| `RESEND_API_KEY` | `re_REDACTED_ROTATED` |
+| `RESEND_API_KEY` | `re_your_resend_api_key` |
 | `MINIYO_EMAIL_FROM` | `MiniYo <management@mail.miniyokids.com>` |
 
 Do **not** set `PORT` — Railway injects it automatically and the server reads it.
 
-> Security note: this Resend key was shared in chat. When convenient, generate a fresh key
-> in the Resend dashboard and replace `RESEND_API_KEY` here. Never put the key in the repo.
+> Security note: never commit a real API key to the repo. Generate a key in the Resend
+> dashboard and set `RESEND_API_KEY` **only** as a Railway environment variable (Service →
+> Variables). If a key is ever exposed, rotate it immediately in the Resend dashboard.
 
 ---
 
