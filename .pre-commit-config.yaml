@@ -1,0 +1,11 @@
+# Optional local pre-commit hooks. To enable:
+#   pip install pre-commit
+#   pre-commit install
+# This runs gitleaks on staged changes before every commit, blocking secrets
+# from ever being committed. CI (.github/workflows/secret-scan.yml) enforces the
+# same check server-side as a backstop.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
