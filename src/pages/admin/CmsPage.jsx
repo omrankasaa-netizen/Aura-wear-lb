@@ -14,10 +14,12 @@ import CmsFaqs from '@/components/admin/cms/CmsFaqs';
 import CmsLegal from '@/components/admin/cms/CmsLegal';
 import CmsPaymentMethods from '@/components/admin/cms/CmsPaymentMethods';
 import CmsHomeSections from '@/components/admin/cms/CmsHomeSections';
-import { Layout, Image, Star, FolderOpen, HelpCircle, Scale, CreditCard, Instagram } from 'lucide-react';
+import CmsShopLook from '@/components/admin/cms/CmsShopLook';
+import { Layout, Image, Star, FolderOpen, HelpCircle, Scale, CreditCard, Instagram, LayoutGrid } from 'lucide-react';
 
 const TABS = [
   { key: 'banners', label: 'Homepage Banners', icon: Image },
+  { key: 'shoplook', label: 'Shop the Look', icon: LayoutGrid },
   { key: 'featured', label: 'Featured', icon: Star },
   { key: 'instagram', label: 'Instagram', icon: Instagram },
   { key: 'media', label: 'Media Library', icon: FolderOpen },
@@ -115,6 +117,7 @@ export default function CmsPage() {
                 campaigns={campaigns}
               />
             )}
+            {tab === 'shoplook' && <CmsShopLook sectionMap={sectionMap} onSave={upsertSection} />}
             {tab === 'featured' && <CmsFeatured sectionMap={sectionMap} products={products} categories={categories} onSave={upsertSection} />}
             {tab === 'instagram' && <CmsHomeSections sectionMap={sectionMap} onSave={upsertSection} />}
             {tab === 'media' && <CmsMediaLibrary assets={mediaAssets} onRefresh={() => qc.invalidateQueries({ queryKey: ['cms-media'] })} currentUser={currentUser} />}
