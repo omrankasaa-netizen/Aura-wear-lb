@@ -24,6 +24,28 @@
     "link_url": {
       "type": "string"
     },
+    "overline": {
+      "type": "string",
+      "description": "Small overline/eyebrow text above the headline (e.g. home_shop_the_look, home_offer_banner)"
+    },
+    "overline_ar": {
+      "type": "string"
+    },
+    "button_label": {
+      "type": "string",
+      "description": "CTA button label (paired with link_url)"
+    },
+    "button_label_ar": {
+      "type": "string"
+    },
+    "tiles_json": {
+      "type": "string",
+      "description": "JSON-encoded ordered array of category tiles for home_shop_the_look: [{ image_url, title, title_ar, link }]"
+    },
+    "gallery_json": {
+      "type": "string",
+      "description": "JSON-encoded array of image URLs (e.g. home_instagram strip photos)"
+    },
     "is_active": {
       "type": "boolean",
       "default": true

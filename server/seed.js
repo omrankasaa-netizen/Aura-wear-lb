@@ -766,6 +766,47 @@ function seedCmsSections() {
   }
 }
 
+// Seed the "Build Your Fit" feature + category grid (home_shop_the_look) and the
+// promo/offer banner (home_offer_banner) with their current hardcoded values, so
+// the storefront looks identical on deploy and the owner edits from the CMS.
+// Only create when missing — never clobber owner edits on redeploy.
+function seedHomeFeatureSections() {
+  const sections = [
+    {
+      section_key: 'home_shop_the_look',
+      overline: 'Shop the look', overline_ar: 'تسوّق الإطلالة',
+      title: 'Build your fit', title_ar: 'كوّن إطلالتك',
+      button_label: 'Shop sets', button_label_ar: 'تسوّق الأطقم',
+      image_url: '/brand/aura-shopthelook.jpg',
+      link_url: '/shop?category=matching-sets',
+      tiles_json: JSON.stringify([
+        { title: 'Everyday Essentials', title_ar: 'الأساسيات اليومية', link: '/shop?category=t-shirts', image_url: '' },
+        { title: 'Weekend Fit', title_ar: 'إطلالة الويكند', link: '/shop?category=polos', image_url: '' },
+        { title: 'Clean Basics', title_ar: 'أساسيات نظيفة', link: '/shop?category=jeans', image_url: '' },
+        { title: 'New Drops', title_ar: 'وصل حديثاً', link: '/shop?category=new-arrivals', image_url: '' },
+      ]),
+      is_active: true,
+      sort_order: 40,
+    },
+    {
+      section_key: 'home_offer_banner',
+      overline: 'Limited drop', overline_ar: 'دروب محدود',
+      title: 'Up to 40% off', title_ar: 'خصم حتى 40%',
+      body: 'Selected fits, while they last. Limited quantities.',
+      body_ar: 'قطع مختارة، طالما توفّرت. كميات محدودة.',
+      button_label: 'Shop offers', button_label_ar: 'تسوّق العروض',
+      image_url: '/brand/aura-offer.jpg',
+      link_url: '/shop?category=offers',
+      is_active: true,
+      sort_order: 50,
+    },
+  ];
+  for (const data of sections) {
+    const existing = queryRecords('CmsSection', { query: { section_key: data.section_key }, limit: 1 });
+    if (!existing.length) createRecord('CmsSection', data);
+  }
+}
+
 export function runSeed() {
   if (kvGet('seed_version') === SEED_VERSION) {
     // Still ensure admin/settings idempotently in case of partial state.
@@ -775,6 +816,7 @@ export function runSeed() {
     seedSiteSettings();
     seedShippingZones();
     seedCmsSections();
+    seedHomeFeatureSections();
     seedStoreContent();
     return;
   }
@@ -785,6 +827,7 @@ export function runSeed() {
   seedShippingZones();
   seedCatalog();
   seedCmsSections();
+  seedHomeFeatureSections();
   seedStoreContent();
   kvSet('seed_version', SEED_VERSION);
   console.log('[seed] complete');
