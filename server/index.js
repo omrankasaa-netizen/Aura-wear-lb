@@ -24,6 +24,7 @@ import { sendEmail } from './email.js';
 import { runSeed } from './seed.js';
 import { repairDuplicateSlugs } from './repairSlugs.js';
 import { optimizeAndStore, bufferFromBase64 } from './imageOptimize.js';
+import { buildFeedRow, buildFeedCsv, absoluteUrl, publicBaseUrl } from './meta.js';
 
 // Build the verification-code email HTML.
 function otpEmailHtml(code) {
@@ -390,6 +391,37 @@ app.put('/api/entities/:entity/:id', ensureEntity, authorizeWrite('update'), (re
 app.delete('/api/entities/:entity/:id', ensureEntity, authorizeWrite('delete'), (req, res) => {
   try {
     res.json(deleteRecord(req.params.entity, req.params.id));
+  } catch (e) { handleError(res, e); }
+});
+
+// ─── Meta catalog feed ────────────────────────────────────────────────────────
+// Public CSV data feed for Meta Commerce Manager. id = normalized product SKU so
+// it matches the pixel/CAPI content_ids. Needs no env vars or secrets.
+app.get('/meta-feed.csv', (req, res) => {
+  try {
+    const base = publicBaseUrl();
+    const products = queryRecords('Product', { query: { status: 'Active' }, sort: 'name' });
+    const rows = products.map((product) => {
+      // First image by sort order (falls back to a brand image in buildFeedRow).
+      const images = queryRecords('ProductImage', {
+        query: { product_id: product.id }, sort: 'sort_order', limit: 1,
+      });
+      const rawImg = images[0]?.image_url || images[0]?.url || images[0]?.file_url || '';
+      const imageUrl = absoluteUrl(rawImg, base);
+
+      // In stock if the (sum of variant) quantity is positive.
+      let inStock;
+      if (product.has_variants) {
+        const variants = queryRecords('ProductVariant', { query: { product_id: product.id } });
+        inStock = variants.reduce((s, v) => s + Number(v.qty_on_hand || 0), 0) > 0;
+      } else {
+        inStock = Number(product.stock_quantity || 0) > 0;
+      }
+      return buildFeedRow(product, { base, imageUrl, inStock });
+    });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=1800');
+    res.send(buildFeedCsv(rows));
   } catch (e) { handleError(res, e); }
 });
 

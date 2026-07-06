@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useDiscounts } from '@/contexts/DiscountContext';
 import { applyDiscountToPrice } from '@/lib/discounts';
+import { trackAddToCart } from '@/lib/meta';
 
 const CartContext = createContext();
 const STORAGE_KEY = 'aura-cart';
@@ -34,6 +35,8 @@ export function CartProvider({ children }) {
 
   function addItem(product, variant, qty = 1) {
     const key = getKey(product, variant);
+    const addPrice = parseFloat(variant?.price_usd || product.price_usd || 0);
+    trackAddToCart(product, qty, addPrice);
     setItems(prev => {
       const existing = prev.find(i => i.key === key);
       if (existing) {

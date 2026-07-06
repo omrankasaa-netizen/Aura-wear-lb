@@ -1,6 +1,7 @@
 import { createRecord, getRecord, updateRecord, queryRecords, bulkCreate, nowIso } from './db.js';
 import { sendEmail } from './email.js';
 import { ADMIN_TOOLS, ADMIN_TOOL_GUARDS } from './adminTools.js';
+import { sendPurchaseCapi, isCapiConfigured } from './meta.js';
 
 // ─── Brand / email constants ────────────────────────────────────────────────
 // Public site base used for links inside automated emails.
@@ -715,9 +716,35 @@ async function upsertCustomerForOrder(body) {
   return { ok: true, customer_id: created.id };
 }
 
+// Server-side Meta Conversions API Purchase. Authoritative + idempotent: fires
+// at most once per order (guarded by a flag on the order doc) and reuses the
+// browser event_id so Meta deduplicates the browser + server events. Silent
+// no-op when the CAPI env vars are unset, so checkout is never affected.
+async function metaTrackPurchase({ order_id, event_id, event_source_url } = {}) {
+  if (!order_id) { const e = new Error('order_id required'); e.status = 400; throw e; }
+  const order = getRecord('Order', order_id);
+  if (!order) { const e = new Error('Order not found'); e.status = 404; throw e; }
+  if (order.meta_capi_purchase_sent) return { ok: true, deduped: true };
+  if (!isCapiConfigured()) return { ok: true, skipped: 'not_configured' };
+
+  const items = queryRecords('OrderItem', { query: { order_id } });
+  const result = await sendPurchaseCapi(order, items, {
+    eventId: event_id || order_id,
+    eventSourceUrl: event_source_url,
+  });
+  if (result.sent) {
+    updateRecord('Order', order_id, {
+      meta_capi_purchase_sent: true,
+      meta_capi_event_id: event_id || order_id,
+    });
+  }
+  return { ok: !!result.sent, ...result };
+}
+
 const REGISTRY = {
   inventoryEngine,
   membershipEngine,
+  metaTrackPurchase,
   upsertCustomerForOrder,
   seedShippingZones,
   sendOrderConfirmation,
@@ -738,6 +765,7 @@ const REGISTRY = {
 const FUNCTION_GUARDS = {
   inventoryEngine: 'public',
   membershipEngine: 'public',
+  metaTrackPurchase: 'public',
   upsertCustomerForOrder: 'public',
   sendWelcomeEmailNew: 'public',
   sendOrderConfirmation: 'public',

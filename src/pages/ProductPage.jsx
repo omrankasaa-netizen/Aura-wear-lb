@@ -11,6 +11,7 @@ import { ReviewList, ReviewForm } from '@/components/storefront/ReviewCard';
 import { BRAND, whatsappLink } from '@/lib/brand';
 import { imageSrc, handleImageError } from '@/lib/imageFraming';
 import ImageLightbox from '@/components/storefront/ImageLightbox';
+import { trackViewContent } from '@/lib/meta';
 
 function Accordion({ title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -73,6 +74,13 @@ export default function ProductPage() {
     const idx = images.findIndex(img => (img.color || '').toLowerCase() === selectedColor.toLowerCase());
     if (idx >= 0) setImgIdx(idx);
   }, [selectedColor, images]);
+
+  // Meta ViewContent when a product page loads.
+  useEffect(() => {
+    if (!product) return;
+    const price = getDiscountedPrice(product) ?? product.price_usd;
+    trackViewContent(product, price);
+  }, [product?.id]);
 
   if (!product) {
     return (
