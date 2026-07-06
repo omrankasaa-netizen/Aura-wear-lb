@@ -8,6 +8,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { CheckCircle2, Tag, X, Loader2, Gift } from 'lucide-react';
 import { validatePromoCode, calcPromoDiscount } from '@/lib/discounts';
 import { useQuery } from '@tanstack/react-query';
+import { trackInitiateCheckout, trackPurchase, newEventId } from '@/lib/meta';
 
 const ScrollToTop = ({ trigger }) => {
   useEffect(() => {
@@ -132,6 +133,14 @@ export default function CheckoutPage() {
   }, [siteSettings.paymentCodEnabled, siteSettings.paymentWhishEnabled, siteSettings.paymentCardEnabled]);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(null);
+
+  // Meta InitiateCheckout — fire once when the checkout page loads with items.
+  const initiateFired = React.useRef(false);
+  useEffect(() => {
+    if (initiateFired.current || !items || items.length === 0) return;
+    initiateFired.current = true;
+    trackInitiateCheckout(items, subtotal);
+  }, [items, subtotal]);
   const [promoInput, setPromoInput] = useState('');
   const [promoCode, setPromoCode] = useState(null);
   const [promoError, setPromoError] = useState('');
@@ -396,6 +405,20 @@ export default function CheckoutPage() {
         await base44.functions.invoke('sendOrderNotification', { order_id: order.id });
       } catch (e) {
         console.error('Order notification email failed:', e);
+      }
+
+      // Meta Purchase — browser pixel + server-side CAPI share one event_id so
+      // Meta deduplicates the two. Both are best-effort and never block checkout.
+      try {
+        const metaEventId = newEventId();
+        trackPurchase({ items, value: grandTotal, eventId: metaEventId });
+        base44.functions.invoke('metaTrackPurchase', {
+          order_id: order.id,
+          event_id: metaEventId,
+          event_source_url: window.location.href,
+        }).catch(() => {});
+      } catch (e) {
+        console.error('Meta purchase tracking failed:', e);
       }
 
       clearCart();

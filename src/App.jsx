@@ -6,6 +6,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import MetaPixel from '@/components/MetaPixel';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { AuthUserProvider } from '@/contexts/AuthUserContext';
 import { CartProvider } from '@/contexts/CartContext';
@@ -158,6 +159,7 @@ function App() {
                 <DiscountProvider>
                   <CartProvider>
                     <Router>
+                      <MetaPixel />
                       <AuthenticatedApp />
                     </Router>
                     <Toaster />
