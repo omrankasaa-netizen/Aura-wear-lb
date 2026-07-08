@@ -66,7 +66,22 @@
     },
     "discount_usd": {
       "type": "number",
-      "default": 0
+      "default": 0,
+      "description": "Resolved order-level discount amount in USD (already applied to grand_total_usd)"
+    },
+    "order_discount_type": {
+      "type": "string",
+      "enum": [
+        "fixed",
+        "percent"
+      ],
+      "default": "fixed",
+      "description": "Whether the manual order-level discount was entered as a fixed $ amount or a %"
+    },
+    "order_discount_value": {
+      "type": "number",
+      "default": 0,
+      "description": "Raw order-level discount value as entered by admin ($ or %, per order_discount_type)"
     },
     "delivery_fee_usd": {
       "type": "number",
@@ -74,7 +89,13 @@
     },
     "grand_total_usd": {
       "type": "number",
-      "default": 0
+      "default": 0,
+      "description": "Final order total used for revenue/analytics: subtotal - discount_usd + delivery_fee_usd, or the admin's manual override when total_overridden is true"
+    },
+    "total_overridden": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when an admin manually overrode the auto-computed final total on a manual order"
     },
     "payment_method": {
       "type": "string",
