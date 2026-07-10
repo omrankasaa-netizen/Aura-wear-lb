@@ -6,6 +6,7 @@ import { useAuthUser } from '@/contexts/AuthUserContext';
 import { X, Upload, Star, Trash2, ImageIcon, Crop as CropIcon } from 'lucide-react';
 import ImageFramingEditor from './ImageFramingEditor';
 import { frameImageStyle } from '@/lib/imageFraming';
+import { imagesToDelete } from '@/lib/productImages';
 
 // Adult apparel sizing (Aura is an adult fashion store).
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
@@ -351,7 +352,11 @@ export default function ProductForm({ product, categories, onClose, onSaved, clo
         }
       }
 
-      // Save images
+      // Save images. Track the ids we keep/create so we can delete the rest:
+      // the editor grid is the source of truth, so a photo the admin removed
+      // must be deleted server-side or it reappears on reload and keeps showing
+      // on the storefront (mirrors the variant reconciliation above).
+      const keptImageIds = new Set();
       for (let i = 0; i < images.length; i++) {
         const img = images[i];
         // `color` links a photo to a variant color so the storefront card can
@@ -359,9 +364,18 @@ export default function ProductForm({ product, categories, onClose, onSaved, clo
         const imgPayload = { product_id: productId, url: img.url, variants: img.variants ?? null, is_primary: img.is_primary, sort_order: i, alt: form.name, alt_ar: form.name_ar, focal: img.focal ?? null, crop: img.crop ?? null, color: img.color || '' };
         if (img.id && !img.isNew) {
           await base44.entities.ProductImage.update(img.id, imgPayload);
+          keptImageIds.add(img.id);
         } else if (img.isNew || !img.id) {
-          await base44.entities.ProductImage.create(imgPayload);
+          const created = await base44.entities.ProductImage.create(imgPayload);
+          if (created?.id) keptImageIds.add(created.id);
         }
+      }
+
+      // Delete image rows the admin removed from the grid. Re-read the DB (not
+      // the possibly-stale query cache) so rows deleted this session are gone.
+      const dbImages = await base44.entities.ProductImage.filter({ product_id: productId });
+      for (const id of imagesToDelete(dbImages, keptImageIds)) {
+        await base44.entities.ProductImage.delete(id);
       }
 
       await logAction({ action: isNew ? 'created' : 'updated', entity: 'Product', entityId: productId, userName: currentUser?.email });
