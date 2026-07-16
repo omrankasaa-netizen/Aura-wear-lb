@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClientInstance } from '@/lib/query-client';
@@ -16,54 +17,68 @@ import { WishlistProvider } from '@/contexts/WishlistContext';
 // Layout
 import Layout from '@/components/layout/Layout';
 
-// Storefront pages
+// Critical storefront path (ad-landing → browse → cart): eager so the first
+// paint after a Facebook/Instagram ad click needs no extra round-trip.
 import Home from '@/pages/Home';
 import ShopPage from '@/pages/ShopPage';
 import ProductPage from '@/pages/ProductPage';
 import CartPage from '@/pages/CartPage';
-import CheckoutPage from '@/pages/CheckoutPage';
-import WishlistPage from '@/pages/WishlistPage';
-import TrackOrderPage from '@/pages/TrackOrderPage';
-import LegalPage from '@/pages/LegalPage';
-import FaqPage from '@/pages/FaqPage';
-import AboutPage from '@/pages/AboutPage';
-import GiftGuidePage from '@/pages/GiftGuidePage';
 
-// Auth pages
-import Login from '@/pages/Login';
-import Register from '@/pages/Register';
-import ForgotPassword from '@/pages/ForgotPassword';
-import ResetPassword from '@/pages/ResetPassword';
-
-// Account pages
-import AccountLayout from '@/pages/account/AccountLayout';
-import ProfilePage from '@/pages/account/ProfilePage';
-import OrderHistoryPage from '@/pages/account/OrderHistoryPage';
-import AddressesPage from '@/pages/account/AddressesPage';
-import MembershipPage from '@/pages/account/MembershipPage';
-
-// Admin pages
-import AdminLogin from '@/pages/admin/AdminLogin';
-import AdminDashboard from '@/pages/admin/AdminDashboard';
+// AdminGuard wraps every admin route inline, so it stays eager; the guarded
+// page components below are still lazy and only load once access is granted.
 import AdminGuard from '@/pages/admin/AdminGuard';
-import TeamManagement from '@/pages/admin/TeamManagement';
-import AdminSettings from '@/pages/admin/AdminSettings';
-import AuditLogPage from '@/pages/admin/AuditLogPage';
-import InventoryPage from '@/pages/admin/InventoryPage';
-import ProductsPage from '@/pages/admin/ProductsPage';
-import OrdersPage from '@/pages/admin/OrdersPage';
-import FinancesPage from '@/pages/admin/FinancesPage';
-import BulkUploadPage from '@/pages/admin/BulkUploadPage';
-import CmsPage from '@/pages/admin/CmsPage';
-import SiteSettingsPage from '@/pages/admin/SiteSettingsPage';
-import PromoCodesPage from '@/pages/admin/PromoCodesPage';
-import DiscountsPage from '@/pages/admin/DiscountsPage';
-import CampaignsPage from '@/pages/admin/CampaignsPage';
-import CategoriesPage from '@/pages/admin/CategoriesPage';
-import CustomersPage from '@/pages/admin/CustomersPage';
-import AdminMembershipPage from '@/pages/admin/MembershipPage';
-import EmailLogPage from '@/pages/admin/EmailLogPage';
-import ShippingPage from '@/pages/admin/ShippingPage';
+
+// Non-critical routes are code-split: checkout, secondary storefront pages,
+// auth, account, and the entire admin panel load on demand. This keeps the
+// initial bundle to the browse/buy path most ad traffic actually hits.
+const CheckoutPage = lazy(() => import('@/pages/CheckoutPage'));
+const WishlistPage = lazy(() => import('@/pages/WishlistPage'));
+const TrackOrderPage = lazy(() => import('@/pages/TrackOrderPage'));
+const LegalPage = lazy(() => import('@/pages/LegalPage'));
+const FaqPage = lazy(() => import('@/pages/FaqPage'));
+const AboutPage = lazy(() => import('@/pages/AboutPage'));
+const GiftGuidePage = lazy(() => import('@/pages/GiftGuidePage'));
+
+const Login = lazy(() => import('@/pages/Login'));
+const Register = lazy(() => import('@/pages/Register'));
+const ForgotPassword = lazy(() => import('@/pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
+
+const AccountLayout = lazy(() => import('@/pages/account/AccountLayout'));
+const ProfilePage = lazy(() => import('@/pages/account/ProfilePage'));
+const OrderHistoryPage = lazy(() => import('@/pages/account/OrderHistoryPage'));
+const AddressesPage = lazy(() => import('@/pages/account/AddressesPage'));
+const MembershipPage = lazy(() => import('@/pages/account/MembershipPage'));
+
+const AdminLogin = lazy(() => import('@/pages/admin/AdminLogin'));
+const AdminDashboard = lazy(() => import('@/pages/admin/AdminDashboard'));
+const TeamManagement = lazy(() => import('@/pages/admin/TeamManagement'));
+const AdminSettings = lazy(() => import('@/pages/admin/AdminSettings'));
+const AuditLogPage = lazy(() => import('@/pages/admin/AuditLogPage'));
+const InventoryPage = lazy(() => import('@/pages/admin/InventoryPage'));
+const ProductsPage = lazy(() => import('@/pages/admin/ProductsPage'));
+const OrdersPage = lazy(() => import('@/pages/admin/OrdersPage'));
+const FinancesPage = lazy(() => import('@/pages/admin/FinancesPage'));
+const BulkUploadPage = lazy(() => import('@/pages/admin/BulkUploadPage'));
+const CmsPage = lazy(() => import('@/pages/admin/CmsPage'));
+const SiteSettingsPage = lazy(() => import('@/pages/admin/SiteSettingsPage'));
+const PromoCodesPage = lazy(() => import('@/pages/admin/PromoCodesPage'));
+const DiscountsPage = lazy(() => import('@/pages/admin/DiscountsPage'));
+const CampaignsPage = lazy(() => import('@/pages/admin/CampaignsPage'));
+const CategoriesPage = lazy(() => import('@/pages/admin/CategoriesPage'));
+const CustomersPage = lazy(() => import('@/pages/admin/CustomersPage'));
+const AdminMembershipPage = lazy(() => import('@/pages/admin/MembershipPage'));
+const EmailLogPage = lazy(() => import('@/pages/admin/EmailLogPage'));
+const ShippingPage = lazy(() => import('@/pages/admin/ShippingPage'));
+
+// Lightweight fallback shown while a code-split route chunk loads.
+function RouteFallback() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-stone border-t-primary rounded-full animate-spin" />
+    </div>
+  );
+}
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -89,6 +104,7 @@ const AuthenticatedApp = () => {
   }
 
   return (
+    <Suspense fallback={<RouteFallback />}>
     <Routes>
       {/* Storefront */}
       <Route element={<Layout />}>
@@ -145,6 +161,7 @@ const AuthenticatedApp = () => {
 
       <Route path="*" element={<PageNotFound />} />
     </Routes>
+    </Suspense>
   );
 };
 
