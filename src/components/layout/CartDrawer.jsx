@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 import { X, Minus, Plus, ShoppingBag, MessageCircle, Tag } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { BRAND, whatsappLink } from '@/lib/brand';
+import { availableQty } from '@/lib/inventory';
 
 export default function CartDrawer() {
   const { isOpen, setIsOpen, items, updateQty, removeItem, subtotal: total, totalQty: count, addItem } = useCart();
@@ -41,7 +42,7 @@ export default function CartDrawer() {
       const results = await base44.entities.Product.filter({ status: 'Active' }, '-is_featured', 50);
       return results
         .filter(p => !recIds.has(p.id) && (catIds.includes(p.category_id) || p.is_featured || p.is_new))
-        .filter(p => (p.stock_quantity || 0) > 0 || p.has_variants)
+        .filter(p => availableQty(p) > 0 || p.has_variants)
         .slice(0, 6);
     },
     enabled: isOpen && items.length > 0,

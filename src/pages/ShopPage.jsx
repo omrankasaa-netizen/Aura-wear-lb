@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import ProductCard from '@/components/storefront/ProductCard';
 import { SlidersHorizontal, X, Search } from 'lucide-react';
 import { FIT_OPTIONS } from '@/lib/brand';
+import { productAvailableQty } from '@/lib/inventory';
 
 function useUrlFilters() {
   const location = useLocation();
@@ -129,9 +130,7 @@ export default function ShopPage() {
 
   const enriched = useMemo(() => products.map(p => {
     const pvs = variantsByProduct[p.id] || [];
-    const totalStock = p.has_variants && pvs.length > 0
-      ? pvs.reduce((s, v) => s + (v.qty_on_hand || 0), 0)
-      : (p.stock_quantity || 0);
+    const totalStock = productAvailableQty(p, pvs);
     return { ...p, primaryImage: imgMap[p.id] || null, cardImages: cardImagesMap[p.id] || [], totalStock };
   }), [products, imgMap, cardImagesMap, variantsByProduct]);
 

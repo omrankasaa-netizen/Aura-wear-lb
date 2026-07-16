@@ -3,7 +3,7 @@ import AdminLayout from '@/components/admin/AdminLayout';
 import { useAuthUser } from '@/contexts/AuthUserContext';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { manualStockAdjust, stockStatus } from '@/lib/inventory';
+import { manualStockAdjust, stockStatus, availableQty } from '@/lib/inventory';
 import { logAction } from '@/lib/auditLog';
 import { Warehouse, ChevronDown, ChevronUp, Plus, Minus, PackagePlus, Filter, Search, Download, Printer } from 'lucide-react';
 import AccessDenied from './AccessDenied';
@@ -219,6 +219,10 @@ function ProductRow({ product, variants, onAdjust }) {
   const [expanded, setExpanded] = useState(false);
   const hasVariants = product.has_variants && variants.length > 0;
   const displayQty = hasVariants ? variants.reduce((s, v) => s + (v.qty_on_hand || 0), 0) : (product.stock_quantity || 0);
+  const availableTotal = hasVariants
+    ? variants.reduce((s, v) => s + availableQty(v), 0)
+    : availableQty(product);
+  const reservedTotal = displayQty - availableTotal;
   const status = stockStatus(displayQty, product.reorder_level);
 
   return (
@@ -239,6 +243,10 @@ function ProductRow({ product, variants, onAdjust }) {
         </td>
         <td className="px-4 py-3 text-sm text-muted-foreground">{product.reorder_level ?? 3}</td>
         <td className="px-4 py-3 text-sm font-semibold text-foreground">{hasVariants ? `${displayQty} total` : displayQty}</td>
+        <td className="px-4 py-3 text-sm text-foreground">
+          {availableTotal}
+          {reservedTotal > 0 && <span className="text-xs text-purple-700 ml-1">({reservedTotal} reserved)</span>}
+        </td>
         <td className="px-4 py-3">
           <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${status.color}`}>{status.label}</span>
         </td>
@@ -258,6 +266,10 @@ function ProductRow({ product, variants, onAdjust }) {
             </td>
             <td className="px-4 py-2.5" />
             <td className="px-4 py-2.5 text-xs font-semibold text-foreground">{v.qty_on_hand || 0}</td>
+            <td className="px-4 py-2.5 text-xs text-foreground">
+              {availableQty(v)}
+              {(v.qty_reserved || 0) > 0 && <span className="text-purple-700 ml-1">({v.qty_reserved} reserved)</span>}
+            </td>
             <td className="px-4 py-2.5">
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${vs.color}`}>{vs.label}</span>
             </td>
@@ -334,14 +346,15 @@ export default function InventoryPage() {
     finally { setExporting(false); }
   }
   function handlePrint() {
-    const headers = ['Product', 'SKU', 'Reorder At', 'Stock', 'Status'];
+    const headers = ['Product', 'SKU', 'Reorder At', 'Stock', 'Available', 'Status'];
     const rows = [];
     for (const p of products) {
       const pvs = variantsByProduct[p.id] || [];
       const hasVariants = p.has_variants && pvs.length > 0;
       const qty = hasVariants ? pvs.reduce((s, v) => s + (v.qty_on_hand || 0), 0) : (p.stock_quantity || 0);
+      const avail = hasVariants ? pvs.reduce((s, v) => s + availableQty(v), 0) : availableQty(p);
       const st = stockStatus(qty, p.reorder_level);
-      rows.push([p.name, p.sku || '', p.reorder_level ?? 3, qty, st.label]);
+      rows.push([p.name, p.sku || '', p.reorder_level ?? 3, qty, avail, st.label]);
     }
     printTable('Inventory', headers, rows);
   }
@@ -403,6 +416,7 @@ export default function InventoryPage() {
                     <th className="text-left px-4 py-3">Product</th>
                     <th className="text-left px-4 py-3">Reorder At</th>
                     <th className="text-left px-4 py-3">Stock</th>
+                    <th className="text-left px-4 py-3">Available</th>
                     <th className="text-left px-4 py-3">Status</th>
                     <th className="text-left px-4 py-3">Action</th>
                   </tr>
@@ -413,7 +427,7 @@ export default function InventoryPage() {
                       onAdjust={(product, variant) => setAdjustTarget({ product, variant })} />
                   ))}
                   {products.length === 0 && (
-                    <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">No products found.</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No products found.</td></tr>
                   )}
                 </tbody>
               </table>

@@ -9,6 +9,7 @@ import { ShoppingBag, ChevronLeft, ChevronRight, Truck, ShieldCheck, MessageCirc
 import WishlistHeart from '@/components/storefront/WishlistHeart';
 import { ReviewList, ReviewForm } from '@/components/storefront/ReviewCard';
 import { BRAND, whatsappLink } from '@/lib/brand';
+import { availableQty } from '@/lib/inventory';
 import { imageSrc, handleImageError } from '@/lib/imageFraming';
 import ImageLightbox from '@/components/storefront/ImageLightbox';
 import { trackViewContent } from '@/lib/meta';
@@ -117,7 +118,10 @@ export default function ProductPage() {
     ? variants.find(v => (!selectedSize || v.size === selectedSize) && (!selectedColor || v.color === selectedColor))
     : null;
 
-  const stockQty = selectedVariant ? (selectedVariant.qty_on_hand || 0) : (product.stock_quantity || 0);
+  // Availability subtracts reserved holds so a fully-reserved item reads as sold
+  // out here, not just at the final server reserve. Falls back to the product for
+  // simple items (and for variant products before a variant is resolved).
+  const stockQty = availableQty(selectedVariant || product);
   const needsSize = sizes.length > 0;
   const needsColor = colors.length > 0;
   // A variant product is only addable once the shopper has picked every option
@@ -240,7 +244,7 @@ export default function ProductPage() {
                 <div className="flex flex-wrap gap-2">
                   {sizes.map(s => {
                     const v = variants.find(vv => vv.size === s && (!selectedColor || vv.color === selectedColor));
-                    const outOfStock = product.has_variants && v && (v.qty_on_hand || 0) <= 0;
+                    const outOfStock = product.has_variants && v && availableQty(v) <= 0;
                     return (
                       <button key={s} onClick={() => !outOfStock && setSelectedSize(s)} disabled={outOfStock}
                         className={`min-w-12 h-12 px-3 rounded-sm border text-sm font-display transition-colors
@@ -259,7 +263,7 @@ export default function ProductPage() {
               <div className="inline-flex items-center border border-border rounded-sm">
                 <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-11 h-11 flex items-center justify-center hover:bg-secondary"><Minus className="w-4 h-4" /></button>
                 <span className="w-12 text-center text-sm tabular-nums">{qty}</span>
-                <button onClick={() => setQty(q => q + 1)} className="w-11 h-11 flex items-center justify-center hover:bg-secondary"><Plus className="w-4 h-4" /></button>
+                <button onClick={() => setQty(q => stockQty > 0 ? Math.min(stockQty, q + 1) : q + 1)} className="w-11 h-11 flex items-center justify-center hover:bg-secondary"><Plus className="w-4 h-4" /></button>
               </div>
             </div>
 

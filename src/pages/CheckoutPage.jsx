@@ -9,7 +9,7 @@ import { CheckCircle2, Tag, X, Loader2, Gift } from 'lucide-react';
 import { validatePromoCode, calcPromoDiscount } from '@/lib/discounts';
 import { useQuery } from '@tanstack/react-query';
 import { trackInitiateCheckout, trackPurchase, newEventId } from '@/lib/meta';
-import { reserveOrderStock } from '@/lib/inventory';
+import { reserveOrderStock, availableQty } from '@/lib/inventory';
 
 const ScrollToTop = ({ trigger }) => {
   useEffect(() => {
@@ -236,18 +236,23 @@ export default function CheckoutPage() {
       try {
         const currentProduct = await base44.entities.Product.get(item.product.id);
         if (!currentProduct) {
-          issues.push(`${item.product.name} is no longer available`);
+          issues.push(t(`${item.product.name} is no longer available`, `${item.product.name} لم يعد متوفراً`));
         } else if (currentProduct.has_variants) {
           const variant = await base44.entities.ProductVariant?.filter?.(
             { product_id: item.product.id, size: item.variant?.size, color: item.variant?.color },
             'id',
             1
           );
-          if (!variant?.length || variant[0].stock_quantity < item.quantity) {
-            issues.push(`${item.product.name} (${item.variant?.size}/${item.variant?.color}): only ${variant?.[0]?.stock_quantity || 0} left`);
+          const avail = variant?.length ? availableQty(variant[0]) : 0;
+          if (avail < item.quantity) {
+            const label = `${item.product.name} (${item.variant?.size}/${item.variant?.color})`;
+            issues.push(t(`${label}: only ${avail} left`, `${label}: بقي ${avail} فقط`));
           }
-        } else if (currentProduct.stock_quantity < item.quantity) {
-          issues.push(`${item.product.name}: only ${currentProduct.stock_quantity} left`);
+        } else {
+          const avail = availableQty(currentProduct);
+          if (avail < item.quantity) {
+            issues.push(t(`${item.product.name}: only ${avail} left`, `${item.product.name}: بقي ${avail} فقط`));
+          }
         }
       } catch (e) {
         console.error('Stock check failed:', e);
