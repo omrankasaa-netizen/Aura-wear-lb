@@ -6,6 +6,7 @@ import { logAction } from '@/lib/auditLog';
 import { useLang } from '@/contexts/LanguageContext';
 import { useDiscounts } from '@/contexts/DiscountContext';
 import { computeOrderTotals } from '@/lib/orderPricing';
+import { reserveOrderStock } from '@/lib/inventory';
 
 const DELIVERY_FEES = { 'Inside Tripoli': 3, 'Outside Tripoli': 5 };
 const CHANNELS = ['Website', 'Instagram', 'Facebook', 'WhatsApp', 'Other'];
@@ -155,6 +156,20 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
           unit_price_usd: Number(item.unit_price_usd) || 0,
           line_total_usd: (Number(item.unit_price_usd) || 0) * (Number(item.quantity) || 0),
         });
+      }
+
+      // Hold inventory immediately for manual orders too, so they can't oversell
+      // against storefront orders. A shortage cancels the order server-side.
+      const reservation = await reserveOrderStock(order.id);
+      if (!reservation?.ok) {
+        const names = (reservation?.shortages || []).map(s => s.name).filter(Boolean).join(', ');
+        setError(
+          names
+            ? t(`Insufficient stock: ${names}`, `مخزون غير كافٍ: ${names}`)
+            : t('Insufficient stock to reserve this order.', 'المخزون غير كافٍ لحجز هذا الطلب.')
+        );
+        setSaving(false);
+        return;
       }
 
       await base44.entities.OrderStatusHistory.create({

@@ -16,6 +16,8 @@
         "Received",
         "Sold",
         "Returned",
+        "Reserved",
+        "Released",
         "Correction",
         "Damaged"
       ]
