@@ -4,6 +4,11 @@ import { base44 } from '@/api/base44Client';
  * Inventory helper — wraps the inventoryEngine backend function.
  */
 
+// Customer-facing availability helpers live in a framework-free module so they
+// can be unit-tested under `node --test`; re-exported here so callers keep a
+// single, discoverable import point alongside stockStatus().
+export { availableQty, productAvailableQty } from './availability.js';
+
 export async function checkOrderStock(orderId) {
   const res = await base44.functions.invoke('inventoryEngine', { action: 'check_stock', order_id: orderId });
   return res.data;

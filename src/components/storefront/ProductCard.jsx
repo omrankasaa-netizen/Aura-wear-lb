@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import WishlistHeart from './WishlistHeart';
 import { BRAND, whatsappLink } from '@/lib/brand';
 import CardImageCarousel from './CardImageCarousel';
+import { availableQty } from '@/lib/inventory';
 
 function Badge({ children, tone = 'dark' }) {
   const tones = {
@@ -28,8 +29,15 @@ export default function ProductCard({ product }) {
   const [activeColor, setActiveColor] = useState(null);
 
   const name = lang === 'ar' ? (product.name_ar || product.name) : product.name;
-  const isOutOfStock = (product.stock_quantity || 0) <= 0 && !product.has_variants;
-  const isLowStock = !isOutOfStock && (product.stock_quantity || 0) > 0 && (product.stock_quantity || 0) <= 3;
+  // Availability subtracts reserved holds. For variant products the grid passes
+  // the summed available count as `totalStock`; when it's absent (cards rendered
+  // without variant data) we can't know, so we preserve the prior "not sold out"
+  // behavior rather than falsely hiding the item.
+  const available = product.has_variants
+    ? (typeof product.totalStock === 'number' ? product.totalStock : null)
+    : availableQty(product);
+  const isOutOfStock = available != null && available <= 0;
+  const isLowStock = available != null && available > 0 && available <= 3;
   const hasCompareDiscount = product.compare_at_price_usd > product.price_usd;
   const autoDiscount = getProductDiscount(product);
   const discountedPrice = autoDiscount ? getDiscountedPrice(product) : null;
