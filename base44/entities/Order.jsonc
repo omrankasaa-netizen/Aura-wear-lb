@@ -122,6 +122,11 @@
       "default": false,
       "description": "True when stock has been deducted for this order. Prevents double-deduction."
     },
+    "stock_reserved": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when stock is held (reserved) for this order at placement, before confirmation. Prevents double-reservation and marks the reserve-lifecycle path for commit/release."
+    },
     "promo_code": {
       "type": "string"
     },

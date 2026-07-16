@@ -40,7 +40,11 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
       if (newStatus === 'Confirmed' && !order.stock_committed) {
         await commitStock({ orderId: order.id, items });
       }
-      if (newStatus === 'Cancelled' && order.stock_committed) {
+      // Cancellation is the only path that frees stock — release whether the
+      // order is merely reserved (placed, not yet confirmed) or already
+      // committed. The server decides which counter to restore from the order's
+      // flags; a legacy order with neither flag is a harmless no-op.
+      if (newStatus === 'Cancelled' && (order.stock_committed || order.stock_reserved)) {
         await releaseStock({ orderId: order.id, items });
       }
 

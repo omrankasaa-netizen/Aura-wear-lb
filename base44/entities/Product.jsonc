@@ -85,6 +85,11 @@
       "default": 0,
       "description": "Used when has_variants=false"
     },
+    "qty_reserved": {
+      "type": "number",
+      "default": 0,
+      "description": "Units held for placed-but-unconfirmed orders (has_variants=false). Availability = stock_quantity - qty_reserved."
+    },
     "reorder_level": {
       "type": "number",
       "default": 3

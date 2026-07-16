@@ -9,6 +9,12 @@ export async function checkOrderStock(orderId) {
   return res.data;
 }
 
+/** Reserve (hold) stock the moment an order is placed, before admin confirmation. */
+export async function reserveOrderStock(orderId) {
+  const res = await base44.functions.invoke('inventoryEngine', { action: 'reserve_stock', order_id: orderId });
+  return res.data;
+}
+
 export async function commitOrderStock(orderId) {
   const res = await base44.functions.invoke('inventoryEngine', { action: 'commit_stock', order_id: orderId });
   return res.data;

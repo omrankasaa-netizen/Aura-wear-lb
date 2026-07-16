@@ -9,6 +9,7 @@ import { CheckCircle2, Tag, X, Loader2, Gift } from 'lucide-react';
 import { validatePromoCode, calcPromoDiscount } from '@/lib/discounts';
 import { useQuery } from '@tanstack/react-query';
 import { trackInitiateCheckout, trackPurchase, newEventId } from '@/lib/meta';
+import { reserveOrderStock } from '@/lib/inventory';
 
 const ScrollToTop = ({ trigger }) => {
   useEffect(() => {
@@ -344,6 +345,40 @@ export default function CheckoutPage() {
         gift_message: gift.is_gift ? gift.gift_message.slice(0, GIFT_MSG_MAX) : '',
       });
 
+      // Create the order line items, then IMMEDIATELY reserve stock. Reservation
+      // is the atomic gate that holds inventory at placement so two customers
+      // can't both take the last unit; a rejected reservation cancels the order
+      // server-side, so we stop here without sending confirmations or clearing
+      // the cart.
+      await Promise.all(items.map(item =>
+        base44.entities.OrderItem.create({
+          order_id: order.id,
+          product_id: item.product.id,
+          product_name: item.product.name,
+          sku: item.product.sku || '',
+          size: item.variant?.size || '',
+          color: item.variant?.color || '',
+          quantity: item.quantity,
+          unit_price_usd: item.price,
+          line_total_usd: item.price * item.quantity,
+        })
+      ));
+
+      const reservation = await reserveOrderStock(order.id);
+      if (!reservation?.ok) {
+        const names = (reservation?.shortages || []).map(s => s.name).filter(Boolean).join(', ');
+        setStockError(
+          names
+            ? t(`Sorry, some items were just reserved by another customer or are out of stock: ${names}`,
+                `عذراً، بعض المنتجات تم حجزها للتو من قبل عميل آخر أو نفدت من المخزون: ${names}`)
+            : t('Sorry, this item was just reserved by another customer or is out of stock.',
+                'عذراً، تم حجز هذا المنتج للتو من قبل عميل آخر أو نفد من المخزون.')
+        );
+        setSubmitting(false);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
       if (customer && customer.free_delivery_credits_remaining > 0 && effectiveDelivery > 0 && subtotal < 50) {
         try {
           await base44.functions.invoke('membershipEngine', {
@@ -381,20 +416,6 @@ export default function CheckoutPage() {
           await base44.auth.updateMe({ preferred_payment: form.payment_method });
         } catch (_) { /* non-critical */ }
       }
-
-      await Promise.all(items.map(item =>
-        base44.entities.OrderItem.create({
-          order_id: order.id,
-          product_id: item.product.id,
-          product_name: item.product.name,
-          sku: item.product.sku || '',
-          size: item.variant?.size || '',
-          color: item.variant?.color || '',
-          quantity: item.quantity,
-          unit_price_usd: item.price,
-          line_total_usd: item.price * item.quantity,
-        })
-      ));
 
       try {
         await base44.functions.invoke('sendOrderConfirmation', { order_id: order.id });
