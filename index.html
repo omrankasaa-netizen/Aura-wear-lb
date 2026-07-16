@@ -8,6 +8,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="manifest" href="/manifest.json" />
 
+    <!-- Perf: warm up connections to the Meta Pixel host and the product-image
+         CDN so the first ad-click paint doesn't stall on DNS/TLS. dns-prefetch
+         is the fallback for browsers that ignore preconnect. -->
+    <link rel="preconnect" href="https://connect.facebook.net" crossorigin />
+    <link rel="dns-prefetch" href="https://connect.facebook.net" />
+    <link rel="preconnect" href="https://pub-ab3852beb0cd42559c87746c47032c7a.r2.dev" crossorigin />
+    <link rel="dns-prefetch" href="https://pub-ab3852beb0cd42559c87746c47032c7a.r2.dev" />
+
     <!-- Primary SEO -->
     <title>AURA | Men's Apparel Lebanon</title>
     <meta name="description" content="AURA — clean fits, limited drops, delivered across Lebanon. Shop men's tees, polos, jeans and matching sets. Cash on delivery available." />
