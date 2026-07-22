@@ -9,7 +9,14 @@ import {
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const OTP_MAX_ATTEMPTS = 5;
 
-const JWT_SECRET = process.env.MINIYO_JWT_SECRET || 'miniyo-dev-secret-change-me';
+// JWT signing secret. MINIYO_JWT_SECRET is REQUIRED in production — refuse to
+// boot with a known fallback secret. Outside production a clearly-labelled
+// dev-only secret keeps local setup zero-config.
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+if (IS_PRODUCTION && !process.env.MINIYO_JWT_SECRET) {
+  throw new Error('[auth] MINIYO_JWT_SECRET is not set. Refusing to start in production without a JWT secret.');
+}
+const JWT_SECRET = process.env.MINIYO_JWT_SECRET || 'aura-dev-only-insecure-secret';
 const COOKIE_NAME = 'miniyo_session';
 const TOKEN_TTL = '30d';
 

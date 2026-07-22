@@ -19,16 +19,31 @@ function slugify(s) {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
+// Super-admin bootstrap. The password comes from the environment:
+// AURA_ADMIN_PASSWORD (preferred) or MINIYO_ADMIN_PASSWORD (legacy fallback).
+// In production we never seed with a hardcoded password — if no env password
+// is set, log a loud warning and skip creating the account. Outside production
+// a clearly-labelled dev-only default keeps local setup zero-config.
 function seedAdmin() {
   const email = 'admin@aura.store';
-  if (!findUserByEmail(email)) {
-    registerUser({
-      email,
-      password: 'AuraSuper2026!',
-      full_name: 'AURA Super Admin',
-      role: 'super_admin',
-    });
+  if (findUserByEmail(email)) return;
+  let password = process.env.AURA_ADMIN_PASSWORD || process.env.MINIYO_ADMIN_PASSWORD;
+  if (!password) {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('[seed] WARNING: AURA_ADMIN_PASSWORD is not set — skipping super-admin seeding. '
+        + 'Set AURA_ADMIN_PASSWORD (or MINIYO_ADMIN_PASSWORD) to bootstrap admin@aura.store.');
+      return;
+    }
+    password = 'aura-dev-only-change-me';
+    console.warn('[seed] WARNING: seeding admin@aura.store with the dev-only default password '
+      + '(NODE_ENV is not production). Set AURA_ADMIN_PASSWORD to override.');
   }
+  registerUser({
+    email,
+    password,
+    full_name: 'AURA Super Admin',
+    role: 'super_admin',
+  });
 }
 
 // Promote the owner + any AURA_SUPER_ADMIN_EMAILS to super_admin. Idempotent

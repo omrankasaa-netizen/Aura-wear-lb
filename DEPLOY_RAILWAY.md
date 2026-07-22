@@ -59,8 +59,9 @@ Do **not** set `PORT` — Railway injects it automatically and the server reads 
    `MiniYo server listening`.
 2. Open the generated `*.up.railway.app` URL. Check:
    - Storefront loads, products show.
-   - `/admin/login` → sign in with `admin@miniyo.store` / `MiniyoSuper2026!`
-     (change this password immediately after first login).
+   - `/admin/login` → sign in with the seeded super-admin account. The seed
+     password is set via the `AURA_ADMIN_PASSWORD` env var (never committed);
+     change it immediately after first login.
    - WhatsApp floating button and footer social links work.
 
 ---
