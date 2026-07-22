@@ -143,5 +143,5 @@ screen with order number `MNY-74602`. The only console output is expected guest
 ```bash
 npm install
 npm run serve     # build + start on :4000
-# admin: admin@miniyo.store / MiniyoSuper2026!
+# admin: seeded super admin; password comes from AURA_ADMIN_PASSWORD env var
 ```
