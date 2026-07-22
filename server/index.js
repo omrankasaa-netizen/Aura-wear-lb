@@ -26,6 +26,7 @@ import { repairDuplicateSlugs } from './repairSlugs.js';
 import { optimizeAndStore, bufferFromBase64 } from './imageOptimize.js';
 import { buildFeedRow, buildFeedCsv, absoluteUrl, publicBaseUrl } from './meta.js';
 import { buildTiktokFeedRow, buildTiktokFeedCsv, isTikTokConfigured } from './tiktok.js';
+import { getProductBySlug, injectProductMeta } from './productMeta.js';
 
 // Build the verification-code email HTML.
 function otpEmailHtml(code) {
@@ -62,6 +63,19 @@ if (!isTikTokConfigured()) {
 }
 
 const app = express();
+app.disable('x-powered-by');
+
+// Baseline security headers. NOTE: a Content-Security-Policy is intentionally
+// NOT set yet — the Meta pixel and Google Fonts make a correct CSP risky;
+// TODO: introduce one in report-only mode first (Content-Security-Policy-Report-Only)
+// and tighten from observed violations.
+app.use((req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'SAMEORIGIN');
+  res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use(cookieParser());
@@ -477,13 +491,117 @@ app.get('/tiktok-feed.csv', (req, res) => {
   } catch (e) { handleError(res, e); }
 });
 
+// ─── Sitemap ────────────────────────────────────────────────────────────────
+// Dynamic XML sitemap for search crawlers (robots.txt points here). Registered
+// before the SPA fallback. Uses publicBaseUrl() so absolute URLs stay consistent
+// with the OG/meta-feed base URL (AURA_PUBLIC_BASE_URL env override).
+function xmlEscape(v) {
+  return String(v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+// Public, indexable storefront pages (from src/App.jsx). Excludes cart,
+// checkout, account, admin, and auth-utility pages (register/reset-password).
+const SITEMAP_STATIC_PAGES = [
+  { loc: '/', priority: '1.0' },
+  { loc: '/shop', priority: '0.5' },
+  { loc: '/gifts', priority: '0.5' },
+  { loc: '/faq', priority: '0.5' },
+  { loc: '/about', priority: '0.5' },
+  { loc: '/track', priority: '0.5' },
+  { loc: '/wishlist', priority: '0.5' },
+  { loc: '/login', priority: '0.5' },
+  { loc: '/legal/contact', priority: '0.5' },
+  { loc: '/legal/shipping', priority: '0.5' },
+  { loc: '/legal/returns', priority: '0.5' },
+  { loc: '/legal/privacy', priority: '0.5' },
+  { loc: '/legal/terms', priority: '0.5' },
+];
+
+function isoDate(v) {
+  const t = Date.parse(v || '');
+  return Number.isFinite(t) ? new Date(t).toISOString().slice(0, 10) : null;
+}
+
+app.get('/sitemap.xml', (req, res) => {
+  try {
+    const base = publicBaseUrl();
+    const products = queryRecords('Product', { query: { status: 'Active' }, limit: 100000 })
+      .filter((p) => p && p.slug);
+    const urls = [];
+    for (const page of SITEMAP_STATIC_PAGES) {
+      urls.push(
+        `  <url><loc>${xmlEscape(base + page.loc)}</loc>`
+        + `<changefreq>weekly</changefreq><priority>${page.priority}</priority></url>`,
+      );
+    }
+    for (const p of products) {
+      const lastmod = isoDate(p.updated_date);
+      urls.push(
+        `  <url><loc>${xmlEscape(`${base}/product/${p.slug}`)}</loc>`
+        + (lastmod ? `<lastmod>${lastmod}</lastmod>` : '')
+        + '<changefreq>weekly</changefreq><priority>0.8</priority></url>',
+      );
+    }
+    const xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+      + '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+      + urls.join('\n')
+      + '\n</urlset>\n';
+    res.set('Content-Type', 'application/xml; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.send(xml);
+  } catch (e) {
+    console.error('[sitemap] generation failed:', e?.message);
+    res.status(500).type('text/plain').send('sitemap generation error');
+  }
+});
+
 app.use('/uploads', express.static(UPLOAD_DIR));
 
 // ─── Serve SPA with history fallback ──────────────────────────────────────────
 if (fs.existsSync(DIST)) {
+  // Serve the PWA manifest and robots.txt with their correct content types,
+  // ahead of both express.static and the SPA history fallback. Without these,
+  // /manifest.json and /robots.txt fall through to the catch-all and return the
+  // index.html shell as text/html — an invalid manifest that some in-app
+  // WebViews (e.g. Facebook) choke on.
+  app.get('/manifest.json', (req, res) => {
+    res.type('application/manifest+json');
+    res.sendFile(path.join(DIST, 'manifest.json'));
+  });
+  app.get('/robots.txt', (req, res) => {
+    res.type('text/plain');
+    res.sendFile(path.join(DIST, 'robots.txt'));
+  });
+
   app.use(express.static(DIST));
+
+  // Server-inject per-product structured data for product detail pages so
+  // Meta's non-JS crawler / Pixel catalog scanner sees per-product OG product
+  // tags + JSON-LD (id, price, availability). Registered before the SPA
+  // fallback. Best-effort — any read/inject error degrades to serving the
+  // untouched shell so the page always loads.
+  const INDEX_HTML = path.join(DIST, 'index.html');
+  app.get('/product/:slug', (req, res, next) => {
+    try {
+      const product = getProductBySlug(req.params.slug);
+      const template = fs.readFileSync(INDEX_HTML, 'utf8');
+      // Unknown slug: serve the SPA shell (the client renders its own NotFound
+      // UI) but with a real HTTP 404 so crawlers stop indexing dead URLs.
+      if (!product) return res.status(404).type('html').send(template);
+      res.type('html').send(injectProductMeta(template, product));
+    } catch (e) {
+      console.error('[productMeta] inject failed:', e?.message);
+      next();
+    }
+  });
+
   app.get(/^(?!\/api\/).*/, (req, res) => {
-    res.sendFile(path.join(DIST, 'index.html'));
+    res.sendFile(INDEX_HTML);
   });
 } else {
   app.get('/', (req, res) => {

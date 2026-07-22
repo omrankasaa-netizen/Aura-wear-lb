@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useLang } from '@/contexts/LanguageContext';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
-import { cmsImageSrc } from '@/lib/imageFraming';
+import { cmsImageSrc, handleImageError } from '@/lib/imageFraming';
 
 // Default feature panel + category tiles. Used as a graceful fallback before any
 // CMS content exists (e.g. first load pre-seed) so the section never disappears.
@@ -56,7 +56,7 @@ export default function ShopTheLook() {
         <div className="grid lg:grid-cols-2 gap-4">
           {/* Editorial look block */}
           <Link to={featureLink} className="group relative block aspect-[4/5] sm:aspect-square overflow-hidden bg-navy rounded-sm">
-            {featureImg && <img src={cmsImageSrc(featureImg, 'large')} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />}
+            {featureImg && <img src={cmsImageSrc(featureImg, 'large')} alt="" loading="lazy" decoding="async" onError={handleImageError} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
             <div className="absolute bottom-0 left-0 p-6 sm:p-8">
               {overline && <p className="eyebrow text-white/70 mb-2">{overline}</p>}
@@ -71,7 +71,7 @@ export default function ShopTheLook() {
               <Link key={i} to={tile.link || '/shop'} className="group relative block aspect-square overflow-hidden bg-secondary rounded-sm">
                 {tile.image_url ? (
                   <>
-                    <img src={cmsImageSrc(tile.image_url, 'card')} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <img src={cmsImageSrc(tile.image_url, 'card')} alt="" loading="lazy" decoding="async" onError={handleImageError} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent" />
                   </>
                 ) : (

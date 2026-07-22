@@ -68,6 +68,34 @@ function guessContentType(filename) {
   return map[ext] || 'application/octet-stream';
 }
 
+// ── Cloudflare edge-cache pre-warming ────────────────────────────────────────
+// The storefront serves images through Cloudflare's resize proxy
+// (/cdn-cgi/image/<opts>/<path> on images.aura-lb.shop). A resized variant
+// that no visitor has requested yet can error on a cold edge cache, leaving
+// broken images for the first visitors after an upload. After a successful
+// store, fetch the two most common resized variants (width=600 and width=1200,
+// quality=80, format=auto — matching the client's card/large requests) so the
+// edge cache is warm before anyone arrives. STRICTLY fire-and-forget: never
+// awaited by the upload path, and failures are logged quietly.
+const CF_RESIZE_ORIGIN = 'https://images.aura-lb.shop';
+
+export function prewarmResizeCache(urls) {
+  try {
+    const list = Object.values(urls || {}).filter(
+      (u) => typeof u === 'string' && u.startsWith(CF_RESIZE_ORIGIN),
+    );
+    for (const u of list) {
+      const { pathname } = new URL(u);
+      for (const width of [600, 1200]) {
+        fetch(`${CF_RESIZE_ORIGIN}/cdn-cgi/image/width=${width},quality=80,format=auto${pathname}`)
+          .catch((e) => console.warn('[imageOptimize] prewarm failed:', e?.message));
+      }
+    }
+  } catch (e) {
+    console.warn('[imageOptimize] prewarm failed:', e?.message);
+  }
+}
+
 // Core entry point. `buffer` is the raw image bytes; `filename` is used only to
 // derive a readable key and a fallback content-type.
 export async function optimizeAndStore(buffer, filename) {
@@ -91,6 +119,8 @@ export async function optimizeAndStore(buffer, filename) {
       }));
       const variants = Object.fromEntries(results.map(r => [r.name, r.url]));
       const large = results.find(r => r.name === 'large')?.info || null;
+      // Fire-and-forget: warm Cloudflare's resize cache for the common sizes.
+      prewarmResizeCache(variants);
       return {
         url: variants[CANONICAL] || variants.large,
         base,
@@ -110,6 +140,8 @@ export async function optimizeAndStore(buffer, filename) {
   const ext = (path.extname(filename || '').toLowerCase()) || '.bin';
   const key = `${base}/orig${ext}`;
   const { url } = await storage.putObject(key, buffer, guessContentType(filename));
+  // Fire-and-forget: warm Cloudflare's resize cache for the common sizes.
+  prewarmResizeCache({ orig: url });
   return {
     url,
     base,
