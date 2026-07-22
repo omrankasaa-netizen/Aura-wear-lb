@@ -23,6 +23,7 @@ import {
 import { sendEmail } from './email.js';
 import { runSeed } from './seed.js';
 import { repairDuplicateSlugs } from './repairSlugs.js';
+import { rewriteImageHostUrls } from './rewriteImageHost.js';
 import { optimizeAndStore, bufferFromBase64 } from './imageOptimize.js';
 import { buildFeedRow, buildFeedCsv, absoluteUrl, publicBaseUrl } from './meta.js';
 import { buildTiktokFeedRow, buildTiktokFeedCsv, isTikTokConfigured } from './tiktok.js';
@@ -51,6 +52,11 @@ runSeed();
 // Repair any pre-existing duplicate product slugs so each product page resolves
 // to the correct item. Idempotent — a no-op once slugs are unique.
 repairDuplicateSlugs();
+
+// Rewrite any image URLs stored with the legacy r2.dev public host to the
+// configured custom domain (R2_PUBLIC_BASE_URL). Idempotent prefix swap across
+// all entity tables; silent no-op when the env var is unset (local dev).
+rewriteImageHostUrls();
 
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 

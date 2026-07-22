@@ -77,7 +77,7 @@ function guessContentType(filename) {
 // quality=80, format=auto — matching the client's card/large requests) so the
 // edge cache is warm before anyone arrives. STRICTLY fire-and-forget: never
 // awaited by the upload path, and failures are logged quietly.
-const CF_RESIZE_ORIGIN = 'https://images.aura-lb.shop';
+const CF_RESIZE_ORIGIN = 'https://image.aura-lb.shop';
 
 export function prewarmResizeCache(urls) {
   try {

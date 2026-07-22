@@ -141,9 +141,9 @@ const CF_IMAGE_RESIZE = String(import.meta.env?.VITE_CF_IMAGE_RESIZE ?? 'true') 
 
 // Hosts whose images can be safely routed through Cloudflare resizing.
 // Set this to AURA's own R2 custom image domain. Configurable via Vite env
-// (VITE_CF_RESIZE_HOSTS, comma-separated); defaults to images.aura-lb.shop.
+// (VITE_CF_RESIZE_HOSTS, comma-separated); defaults to image.aura-lb.shop.
 const CF_RESIZE_HOSTS = new Set(
-  (import.meta.env?.VITE_CF_RESIZE_HOSTS || 'images.aura-lb.shop')
+  (import.meta.env?.VITE_CF_RESIZE_HOSTS || 'image.aura-lb.shop')
     .split(',').map(s => s.trim()).filter(Boolean)
 );
 
