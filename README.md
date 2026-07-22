@@ -59,7 +59,7 @@ full list):
 | `AURA_ADMIN_PASSWORD` | Password for the seeded super admin (see below) |
 | `AURA_SUPER_ADMIN_EMAILS` | Comma-separated emails promoted to `super_admin` on every boot |
 | `RESEND_API_KEY` / `MINIYO_EMAIL_FROM` | Transactional email via Resend |
-| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` / `R2_PUBLIC_BASE_URL` | Cloudflare R2 image storage |
+| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` / `R2_PUBLIC_BASE_URL` | Cloudflare R2 image storage. Set `R2_PUBLIC_BASE_URL=https://image.aura-lb.shop` — on boot the server rewrites any legacy `r2.dev` image URLs stored in the DB to this host (see `server/rewriteImageHost.js`) |
 | `AURA_META_PIXEL_ID` / `AURA_META_CAPI_ACCESS_TOKEN` | Meta Pixel + Conversions API (see `docs/META_TRACKING.md`) |
 | `VITE_TIKTOK_PIXEL_ID` / `AURA_TIKTOK_PIXEL_ID` / `AURA_TIKTOK_ACCESS_TOKEN` | TikTok Pixel + Events API (see `docs/TIKTOK_TRACKING.md`) |
 
