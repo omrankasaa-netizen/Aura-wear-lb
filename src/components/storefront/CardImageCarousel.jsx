@@ -68,6 +68,8 @@ export default function CardImageCarousel({ images, fallbackAlt = '', rtl = fals
       <img
         src={current.variants ? (current.variants.card || current.url) : cmsImageSrc(current.url, 'card')}
         alt={current.alt || fallbackAlt}
+        width={600}
+        height={800}
         loading="lazy"
         decoding="async"
         onError={handleImageError}
@@ -86,7 +88,7 @@ export default function CardImageCarousel({ images, fallbackAlt = '', rtl = fals
             type="button"
             aria-label="Previous image"
             onClick={(e) => go(prevDelta, e)}
-            className="absolute top-1/2 -translate-y-1/2 left-1.5 w-7 h-7 flex items-center justify-center bg-background/85 backdrop-blur rounded-full shadow-sm opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity hover:bg-background z-10"
+            className="absolute top-1/2 -translate-y-1/2 left-1.5 w-9 h-9 flex items-center justify-center bg-background/85 backdrop-blur rounded-full shadow-sm opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity hover:bg-background z-10"
           >
             <ChevronLeft className="w-4 h-4" strokeWidth={1.75} />
           </button>
@@ -94,7 +96,7 @@ export default function CardImageCarousel({ images, fallbackAlt = '', rtl = fals
             type="button"
             aria-label="Next image"
             onClick={(e) => go(nextDelta, e)}
-            className="absolute top-1/2 -translate-y-1/2 right-1.5 w-7 h-7 flex items-center justify-center bg-background/85 backdrop-blur rounded-full shadow-sm opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity hover:bg-background z-10"
+            className="absolute top-1/2 -translate-y-1/2 right-1.5 w-9 h-9 flex items-center justify-center bg-background/85 backdrop-blur rounded-full shadow-sm opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity hover:bg-background z-10"
           >
             <ChevronRight className="w-4 h-4" strokeWidth={1.75} />
           </button>

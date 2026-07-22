@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { Instagram } from 'lucide-react';
 import { BRAND } from '@/lib/brand';
+import { handleImageError } from '@/lib/imageFraming';
 
 export default function InstagramStrip() {
   const { t, lang } = useLang();
@@ -68,7 +69,7 @@ export default function InstagramStrip() {
               className="aspect-square overflow-hidden bg-secondary group rounded-sm"
             >
               {url ? (
-                <img src={url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <img src={url} alt="" width={320} height={320} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center"><Instagram className="w-5 h-5 text-muted-foreground/30" /></div>
               )}

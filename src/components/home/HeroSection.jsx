@@ -27,7 +27,13 @@ export default function HeroSection() {
         {imgUrl ? (
           // LCP image: eager + high priority so the hero paints fast, and the
           // onError retry recovers from cold-cache resize-proxy failures.
-          <img src={cmsImageSrc(imgUrl, 'large')} alt="" loading="eager" fetchpriority="high" decoding="async" onError={handleImageError} className="absolute inset-0 w-full h-full object-cover" />
+          // srcset/sizes let the browser pick the smallest adequate variant
+          // (mobile pulls ~600w instead of the 1200w large).
+          <img src={cmsImageSrc(imgUrl, 'large')}
+            srcSet={`${cmsImageSrc(imgUrl, 'thumb')} 320w, ${cmsImageSrc(imgUrl, 'card')} 600w, ${cmsImageSrc(imgUrl, 'large')} 1200w`}
+            sizes="100vw"
+            width={1600} height={700}
+            alt="" loading="eager" fetchpriority="high" decoding="async" onError={handleImageError} className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-secondary via-stone to-secondary" />
         )}

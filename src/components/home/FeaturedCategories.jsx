@@ -37,7 +37,7 @@ export default function FeaturedCategories() {
             <motion.div key={c.slug} initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.05 }}>
               <Link to={`/shop?category=${c.slug}`} className="group relative block aspect-square overflow-hidden bg-secondary rounded-sm">
                 {c.image ? (
-                  <img src={cmsImageSrc(c.image, 'card')} alt={c.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <img src={cmsImageSrc(c.image, 'card')} alt={c.name} width={176} height={176} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <img src="/brand/aura-mark.png" alt="" className="w-10 h-10 opacity-15" />

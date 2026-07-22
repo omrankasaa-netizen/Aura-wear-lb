@@ -74,7 +74,7 @@ export default function Header() {
 
           {/* Logo (center) */}
           <Link to="/" className="flex flex-col items-center shrink-0 lg:absolute lg:left-1/2 lg:-translate-x-1/2">
-            <img src={LOGO.dark} alt="AURA" className="h-7 lg:h-9 w-auto object-contain" />
+            <img src={LOGO.dark} alt="AURA" width={222} height={184} className="h-7 lg:h-9 w-auto object-contain" />
           </Link>
 
           {/* Right actions */}
@@ -126,7 +126,7 @@ export default function Header() {
               placeholder={t('Search tees, polos, jeans…', 'ابحث عن تيشيرت، بولو، جينز…')}
               className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground"
             />
-            <button type="button" onClick={() => setSearchOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+            <button type="button" onClick={() => setSearchOpen(false)} aria-label={t('Close search', 'إغلاق البحث')} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
           </form>
         )}
       </div>
@@ -139,7 +139,7 @@ export default function Header() {
           <div className="fixed left-0 rtl:left-auto rtl:right-0 top-0 bottom-0 w-[85%] max-w-xs bg-background z-[101] flex flex-col shadow-2xl animate-in slide-in-from-left rtl:slide-in-from-right duration-300">
             <div className="flex items-center justify-between h-16 px-4 border-b border-border">
               <img src={LOGO.dark} alt="AURA" className="h-6 w-auto" />
-              <button onClick={() => setMobileOpen(false)} className="w-10 h-10 flex items-center justify-center -mr-2"><X className="w-5 h-5" /></button>
+              <button onClick={() => setMobileOpen(false)} aria-label={t('Close menu', 'إغلاق القائمة')} className="w-10 h-10 flex items-center justify-center -mr-2"><X className="w-5 h-5" /></button>
             </div>
             <div className="flex-1 overflow-y-auto py-2">
               <p className="eyebrow text-muted-foreground px-4 pt-4 pb-2">{t('Shop', 'تسوّق')}</p>

@@ -38,10 +38,12 @@ export default function Footer() {
             </p>
             <div className="flex gap-2.5 mt-1">
               <a href={whatsappLink(null, whatsapp)} target="_blank" rel="noopener"
+                aria-label={t('Chat with us on WhatsApp', 'تواصل معنا عبر واتساب')}
                 className="w-9 h-9 border border-white/20 rounded-sm flex items-center justify-center hover:bg-white hover:text-charcoal transition-colors">
                 <MessageCircle className="w-4 h-4" />
               </a>
               <a href={instagram} target="_blank" rel="noopener"
+                aria-label={t('AURA on Instagram', 'AURA على إنستغرام')}
                 className="w-9 h-9 border border-white/20 rounded-sm flex items-center justify-center hover:bg-white hover:text-charcoal transition-colors">
                 <Instagram className="w-4 h-4" />
               </a>
