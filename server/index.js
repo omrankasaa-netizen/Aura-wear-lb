@@ -25,6 +25,7 @@ import { runSeed } from './seed.js';
 import { repairDuplicateSlugs } from './repairSlugs.js';
 import { optimizeAndStore, bufferFromBase64 } from './imageOptimize.js';
 import { buildFeedRow, buildFeedCsv, absoluteUrl, publicBaseUrl } from './meta.js';
+import { buildTiktokFeedRow, buildTiktokFeedCsv, isTikTokConfigured } from './tiktok.js';
 
 // Build the verification-code email HTML.
 function otpEmailHtml(code) {
@@ -51,6 +52,14 @@ runSeed();
 repairDuplicateSlugs();
 
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+// Log once at boot whether the server-side TikTok Events API is active. When
+// unconfigured every TikTok send silently no-ops (never throws, never hits the
+// network) — this line makes that state visible without exposing the secret.
+// Mirrors the Meta CAPI pattern.
+if (!isTikTokConfigured()) {
+  console.warn('[tiktokEvents] TikTok Events API disabled: missing AURA_TIKTOK_PIXEL_ID and/or AURA_TIKTOK_ACCESS_TOKEN');
+}
 
 const app = express();
 app.use(express.json({ limit: '25mb' }));
@@ -422,6 +431,49 @@ app.get('/meta-feed.csv', (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=1800');
     res.send(buildFeedCsv(rows));
+  } catch (e) { handleError(res, e); }
+});
+
+// ─── TikTok catalog feed ──────────────────────────────────────────────────────
+// TikTok Catalog CSV product feed. Mirrors the Meta feed (same product query,
+// image resolution, price/availability logic, and normalized sku as the catalog
+// id — sku_id == Meta feed id == pixel content_id) but uses TikTok's column
+// names and populates google_product_category/product_type from the category.
+// Needs no env vars or secrets.
+app.get('/tiktok-feed.csv', (req, res) => {
+  try {
+    const base = publicBaseUrl();
+    const categoriesById = new Map(
+      queryRecords('Category', { limit: 100000 }).map((c) => [c.id, c]),
+    );
+    const products = queryRecords('Product', { query: { status: 'Active' }, sort: 'name' });
+    const rows = products.map((product) => {
+      // First image by sort order (falls back to a brand image in the row builder).
+      const images = queryRecords('ProductImage', {
+        query: { product_id: product.id }, sort: 'sort_order', limit: 1,
+      });
+      const rawImg = images[0]?.image_url || images[0]?.url || images[0]?.file_url || '';
+      const imageUrl = absoluteUrl(rawImg, base);
+
+      // In stock if the (sum of variant) quantity is positive.
+      let inStock;
+      if (product.has_variants) {
+        const variants = queryRecords('ProductVariant', { query: { product_id: product.id } });
+        inStock = variants.reduce((s, v) => s + Number(v.qty_on_hand || 0), 0) > 0;
+      } else {
+        inStock = Number(product.stock_quantity || 0) > 0;
+      }
+
+      const cat = product.category_id ? categoriesById.get(product.category_id) : null;
+      const sub = product.subcategory_id ? categoriesById.get(product.subcategory_id) : null;
+      return buildTiktokFeedRow(product, {
+        base, imageUrl, inStock,
+        category: cat?.name || '', subcategory: sub?.name || '',
+      });
+    });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=1800');
+    res.send(buildTiktokFeedCsv(rows));
   } catch (e) { handleError(res, e); }
 });
 

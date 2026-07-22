@@ -9,6 +9,7 @@ import { CheckCircle2, Tag, X, Loader2, Gift } from 'lucide-react';
 import { validatePromoCode, calcPromoDiscount } from '@/lib/discounts';
 import { useQuery } from '@tanstack/react-query';
 import { trackInitiateCheckout, trackPurchase, newEventId } from '@/lib/meta';
+import { ttInitiateCheckout } from '@/lib/tiktok';
 import { reserveOrderStock, availableQty } from '@/lib/inventory';
 
 const ScrollToTop = ({ trigger }) => {
@@ -135,12 +136,13 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(null);
 
-  // Meta InitiateCheckout — fire once when the checkout page loads with items.
+  // Meta + TikTok InitiateCheckout — fire once when the checkout page loads with items.
   const initiateFired = React.useRef(false);
   useEffect(() => {
     if (initiateFired.current || !items || items.length === 0) return;
     initiateFired.current = true;
     trackInitiateCheckout(items, subtotal);
+    ttInitiateCheckout(items, subtotal);
   }, [items, subtotal]);
   const [promoInput, setPromoInput] = useState('');
   const [promoCode, setPromoCode] = useState(null);
@@ -445,6 +447,18 @@ export default function CheckoutPage() {
         }).catch(() => {});
       } catch (e) {
         console.error('Meta purchase tracking failed:', e);
+      }
+
+      // TikTok CompletePayment — server-side only (the browser pixel deliberately
+      // does NOT fire a purchase event; the Events API send is the single source,
+      // from trusted order data). Best-effort, never blocks checkout.
+      try {
+        base44.functions.invoke('tiktokTrackPurchase', {
+          order_id: order.id,
+          event_id: newEventId(),
+        }).catch(() => {});
+      } catch (e) {
+        console.error('TikTok purchase tracking failed:', e);
       }
 
       clearCart();

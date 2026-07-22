@@ -2,6 +2,7 @@ import { db, createRecord, getRecord, updateRecord, queryRecords, bulkCreate, no
 import { sendEmail } from './email.js';
 import { ADMIN_TOOLS, ADMIN_TOOL_GUARDS } from './adminTools.js';
 import { sendPurchaseCapi, isCapiConfigured } from './meta.js';
+import { sendCompletePayment, isTikTokConfigured } from './tiktok.js';
 
 // ─── Brand / email constants ────────────────────────────────────────────────
 // Public site base used for links inside automated emails.
@@ -892,10 +893,34 @@ async function metaTrackPurchase({ order_id, event_id, event_source_url } = {}) 
   return { ok: !!result.sent, ...result };
 }
 
+// Server-side TikTok Events API CompletePayment. Authoritative + idempotent:
+// fires at most once per order (guarded by a flag on the order doc). Silent
+// no-op when the TikTok env vars are unset, so checkout is never affected.
+async function tiktokTrackPurchase({ order_id, event_id } = {}) {
+  if (!order_id) { const e = new Error('order_id required'); e.status = 400; throw e; }
+  const order = getRecord('Order', order_id);
+  if (!order) { const e = new Error('Order not found'); e.status = 404; throw e; }
+  if (order.tiktok_purchase_sent) return { ok: true, deduped: true };
+  if (!isTikTokConfigured()) return { ok: true, skipped: 'not_configured' };
+
+  const items = queryRecords('OrderItem', { query: { order_id } });
+  const result = await sendCompletePayment(order, items, {
+    eventId: event_id || order_id,
+  });
+  if (result.sent) {
+    updateRecord('Order', order_id, {
+      tiktok_purchase_sent: true,
+      tiktok_event_id: event_id || order_id,
+    });
+  }
+  return { ok: !!result.sent, ...result };
+}
+
 const REGISTRY = {
   inventoryEngine,
   membershipEngine,
   metaTrackPurchase,
+  tiktokTrackPurchase,
   upsertCustomerForOrder,
   seedShippingZones,
   sendOrderConfirmation,
@@ -917,6 +942,7 @@ const FUNCTION_GUARDS = {
   inventoryEngine: 'public',
   membershipEngine: 'public',
   metaTrackPurchase: 'public',
+  tiktokTrackPurchase: 'public',
   upsertCustomerForOrder: 'public',
   sendWelcomeEmailNew: 'public',
   sendOrderConfirmation: 'public',
