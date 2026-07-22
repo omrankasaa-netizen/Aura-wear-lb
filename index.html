@@ -16,12 +16,21 @@
     <link rel="preconnect" href="https://pub-ab3852beb0cd42559c87746c47032c7a.r2.dev" crossorigin />
     <link rel="dns-prefetch" href="https://pub-ab3852beb0cd42559c87746c47032c7a.r2.dev" />
 
+    <!-- AURA_SOCIAL_META_START — this whole region is replaced server-side
+         with per-product OG tags + JSON-LD when serving /product/:slug. -->
     <!-- Primary SEO -->
     <title>AURA | Men's Apparel Lebanon</title>
     <meta name="description" content="AURA — clean fits, limited drops, delivered across Lebanon. Shop men's tees, polos, jeans and matching sets. Cash on delivery available." />
     <meta name="keywords" content="men's clothing lebanon, mens apparel beirut, oversized tees, polos, jeans, matching sets, aura wear lb" />
     <meta name="author" content="AURA" />
     <link rel="canonical" href="https://aura-lb.shop/" />
+
+    <!-- hreflang: the SPA has a client-side EN/AR toggle with no separate URLs,
+         so both alternates point at the single canonical URL. An "ar" hreflang
+         is intentionally NOT declared — Arabic routing would need dedicated
+         /ar/ URLs in a future iteration before it can be. -->
+    <link rel="alternate" hreflang="x-default" href="https://aura-lb.shop/" />
+    <link rel="alternate" hreflang="en" href="https://aura-lb.shop/" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
@@ -38,6 +47,7 @@
     <meta name="twitter:title" content="AURA | Men's Apparel Lebanon" />
     <meta name="twitter:description" content="Level up your aura. Clean fits. Limited drops. Delivered across Lebanon." />
     <meta name="twitter:image" content="https://aura-lb.shop/brand/aura-icon-512.png" />
+    <!-- AURA_SOCIAL_META_END -->
 
     <!-- Robots -->
     <meta name="robots" content="index, follow" />
