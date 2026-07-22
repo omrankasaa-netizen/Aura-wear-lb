@@ -1,0 +1,35 @@
+# AURA
+
+> AURA (aura-lb.shop) is a men's apparel store based in Lebanon — clean fits,
+> limited drops: tees, polos, shirts, jeans, joggers and matching sets.
+> Delivery across Lebanon with Cash on Delivery. The site is bilingual
+> (English / Arabic).
+
+## Storefront
+
+- [Homepage](https://aura-lb.shop/): new arrivals, offers, shop the look
+- [Shop all products](https://aura-lb.shop/shop): full catalog with category filters and search
+- [Track order](https://aura-lb.shop/track): order status lookup by order number and phone
+- [About](https://aura-lb.shop/about): brand story
+- [FAQ](https://aura-lb.shop/faq): delivery, payment, sizing and returns answers
+- [Gift guide](https://aura-lb.shop/gifts): curated gift picks
+
+## Product data
+
+- [Meta catalog feed (CSV)](https://aura-lb.shop/meta-feed.csv): full product feed — id (SKU), title, description, price USD, availability, image link, product page link
+- [TikTok catalog feed (CSV)](https://aura-lb.shop/tiktok-feed.csv): same products with TikTok column names and Google product categories
+- [Sitemap (XML)](https://aura-lb.shop/sitemap.xml): all indexable pages and product URLs
+- Product pages live at `https://aura-lb.shop/product/{slug}` and carry OpenGraph product tags plus JSON-LD (price, availability, aggregateRating).
+
+## Policies
+
+- Payment: Cash on Delivery across Lebanon; no card required.
+- Delivery: nationwide Lebanon; free delivery on orders over $50.
+- Support: WhatsApp (linked in the site footer) and the FAQ page.
+- Legal pages (privacy, returns, shipping, terms) are linked from the site footer.
+
+## Notes for agents
+
+- Prices are in USD; Cash on Delivery is settled in USD or LBP at delivery.
+- Images are served from the image.aura-lb.shop CDN (Cloudflare R2) with on-the-fly resizing.
+- The storefront is bilingual: most content has English and Arabic variants.
