@@ -2,13 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useLang } from '@/contexts/LanguageContext';
 import {
-  initMetaPixel, trackPageView, shouldAskConsent, grantConsent, denyConsent,
-  isPixelConfigured,
+  initMetaPixel, trackPageView, grantConsent, denyConsent,
+  isPixelConfigured, getConsent,
 } from '@/lib/meta';
+import { initTikTokPixel, ttTrackPageView, onConsentGranted, isTikTokConfigured } from '@/lib/tiktok';
 
-// Boots the Meta Pixel (no-op if VITE_META_PIXEL_ID is unset), fires a PageView
-// on every SPA route change once consent is granted, and renders a lightweight
-// bilingual consent banner when a decision hasn't been made yet.
+// Boots the Meta + TikTok pixels (each a no-op if its VITE_* id env is unset),
+// fires a PageView on every SPA route change once consent is granted, and
+// renders a lightweight bilingual consent banner when a decision hasn't been
+// made yet. Consent is shared between the two pixels (one banner).
 export default function MetaPixel() {
   const location = useLocation();
   const { t } = useLang();
@@ -17,19 +19,22 @@ export default function MetaPixel() {
   // Boot once on mount.
   useEffect(() => {
     initMetaPixel();
-    setAsk(shouldAskConsent());
+    initTikTokPixel();
+    // Ask when either pixel is configured and no consent decision is stored yet.
+    setAsk((isPixelConfigured() || isTikTokConfigured()) && getConsent() == null);
   }, []);
 
-  // PageView on client-side navigation (initMetaPixel already fired the first one).
+  // PageView on client-side navigation (init already fired the first one).
   const firstRender = React.useRef(true);
   useEffect(() => {
     if (firstRender.current) { firstRender.current = false; return; }
     trackPageView();
+    ttTrackPageView();
   }, [location.pathname]);
 
-  if (!isPixelConfigured() || !ask) return null;
+  if ((!isPixelConfigured() && !isTikTokConfigured()) || !ask) return null;
 
-  const accept = () => { grantConsent(); setAsk(false); };
+  const accept = () => { grantConsent(); onConsentGranted(); setAsk(false); };
   const decline = () => { denyConsent(); setAsk(false); };
 
   return (

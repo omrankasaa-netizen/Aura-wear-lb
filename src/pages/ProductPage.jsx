@@ -13,6 +13,7 @@ import { availableQty } from '@/lib/inventory';
 import { imageSrc, handleImageError } from '@/lib/imageFraming';
 import ImageLightbox from '@/components/storefront/ImageLightbox';
 import { trackViewContent } from '@/lib/meta';
+import { ttViewContent } from '@/lib/tiktok';
 
 function Accordion({ title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -76,11 +77,12 @@ export default function ProductPage() {
     if (idx >= 0) setImgIdx(idx);
   }, [selectedColor, images]);
 
-  // Meta ViewContent when a product page loads.
+  // Meta + TikTok ViewContent when a product page loads.
   useEffect(() => {
     if (!product) return;
     const price = getDiscountedPrice(product) ?? product.price_usd;
     trackViewContent(product, price);
+    ttViewContent(product, price);
   }, [product?.id]);
 
   if (!product) {
