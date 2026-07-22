@@ -1,11 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { useLang } from '@/contexts/LanguageContext';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { BRAND } from '@/lib/brand';
-import { cmsImageSrc } from '@/lib/imageFraming';
+import { cmsImageSrc, handleImageError } from '@/lib/imageFraming';
 
 export default function HeroSection() {
   const { lang, t } = useLang();
@@ -26,17 +25,19 @@ export default function HeroSection() {
     <section className="relative overflow-hidden bg-secondary">
       <div className="relative aspect-[4/5] sm:aspect-[16/10] lg:aspect-[16/7] w-full">
         {imgUrl ? (
-          <img src={cmsImageSrc(imgUrl, 'large')} alt="" loading="eager" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+          // LCP image: eager + high priority so the hero paints fast, and the
+          // onError retry recovers from cold-cache resize-proxy failures.
+          <img src={cmsImageSrc(imgUrl, 'large')} alt="" loading="eager" fetchpriority="high" decoding="async" onError={handleImageError} className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-secondary via-stone to-secondary" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent" />
 
         <div className="relative h-full max-w-[1280px] mx-auto px-5 sm:px-8 flex flex-col justify-end pb-10 sm:pb-14 lg:pb-16">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: 'easeOut' }}
+          {/* Text renders immediately at full opacity (no fade-in tied to the
+              hero image load), so the headline never washes out on a slow
+              first paint. */}
+          <div
             className="max-w-2xl"
             dir={lang === 'ar' ? 'rtl' : 'ltr'}
           >
@@ -53,7 +54,7 @@ export default function HeroSection() {
                 {t('Explore Offers', 'اكتشف العروض')}
               </Link>
             </div>
-          </motion.div>
+          </div>
         </div>
       </div>
     </section>

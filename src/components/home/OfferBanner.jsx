@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useLang } from '@/contexts/LanguageContext';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
-import { cmsImageSrc } from '@/lib/imageFraming';
+import { cmsImageSrc, handleImageError } from '@/lib/imageFraming';
 
 // Default promo banner copy. Used as a graceful fallback before any CMS content
 // exists (e.g. first load pre-seed) so the banner never disappears.
@@ -42,7 +42,7 @@ export default function OfferBanner() {
     <section className="py-4 sm:py-8">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6">
         <div className="relative overflow-hidden bg-charcoal text-white rounded-sm">
-          {imageUrl && <img src={cmsImageSrc(imageUrl, 'large')} alt="" className="absolute inset-0 w-full h-full object-cover" />}
+          {imageUrl && <img src={cmsImageSrc(imageUrl, 'large')} alt="" loading="lazy" decoding="async" onError={handleImageError} className="absolute inset-0 w-full h-full object-cover" />}
           <div className="absolute inset-0 bg-charcoal/65" />
           <div className="relative px-6 sm:px-12 py-12 sm:py-16 text-center">
             {overline && <p className="eyebrow text-white/60 mb-3">{overline}</p>}
