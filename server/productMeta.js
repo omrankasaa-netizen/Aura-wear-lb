@@ -59,6 +59,38 @@ function formatPrice(value) {
   return Number.isFinite(n) ? n.toFixed(2) : null;
 }
 
+// JSON-LD/OG image must be absolute.
+function absolutize(url) {
+  const v = String(url || '').trim();
+  if (!v) return '';
+  return /^https?:\/\//i.test(v) ? v : `${SITE_BASE}${v.startsWith('/') ? '' : '/'}${v}`;
+}
+
+// Resolve the product's primary image the SAME way the catalog feed routes do:
+// Product.image_url first, then the first ProductImage row (by sort_order).
+// When the record carries a variants map, prefer the large derivative (best
+// for og:image) with card/original as fallbacks. Many products have an empty
+// Product.image_url — their images live only in ProductImage rows — which used
+// to make og:image fall back to the brand icon.
+function resolveProductImage(product) {
+  const direct = absolutize(product.image_url);
+  if (direct) return direct;
+  try {
+    const rows = queryRecords('ProductImage', {
+      query: { product_id: product.id }, sort: 'sort_order', limit: 1,
+    });
+    const img = rows[0];
+    if (!img) return '';
+    const variants = img.variants || img.image_variants || null;
+    const candidate =
+      (variants && (variants.large || variants.card || variants.thumb)) ||
+      img.image_url || img.url || img.file_url || '';
+    return absolutize(candidate);
+  } catch {
+    return '';
+  }
+}
+
 // Build the replacement <head> block (SEO + OG product tags + JSON-LD) for a
 // product. Uses English fields — the crawler is locale-agnostic and the client
 // still renders the localized UI. Returns an indented HTML string.
@@ -77,11 +109,10 @@ export function buildProductMetaBlock(product) {
   const name = (product.name || 'AURA').trim();
   const socialDesc = (product.short_description || product.description || '').trim();
   const jsonLdDesc = (product.description || product.short_description || '').trim();
-  // JSON-LD/OG image must be absolute.
-  const rawImage = (product.image_url || '').trim();
-  const image = rawImage
-    ? (/^https?:\/\//i.test(rawImage) ? rawImage : `${SITE_BASE}${rawImage.startsWith('/') ? '' : '/'}${rawImage}`)
-    : DEFAULT_SHARE_IMAGE;
+  // JSON-LD/OG image must be absolute. Resolved like the catalog feed
+  // (Product.image_url, else first ProductImage row, large variant preferred).
+  const resolvedImage = resolveProductImage(product);
+  const image = resolvedImage || DEFAULT_SHARE_IMAGE;
   // Availability from the stock fields (mirrors the meta-feed logic, with one
   // legacy tolerance: an Active product whose stock_quantity was never set at
   // all is treated as available — only an explicit 0 marks it out).
@@ -133,7 +164,7 @@ export function buildProductMetaBlock(product) {
     ...(sku ? { productID: sku, sku } : {}),
     name,
     ...(jsonLdDesc ? { description: jsonLdDesc } : {}),
-    ...(product.image_url ? { image } : {}),
+    ...(resolvedImage ? { image } : {}),
     brand: { '@type': 'Brand', name: 'AURA' },
     ...(aggregateRating
       ? {
