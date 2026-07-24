@@ -143,4 +143,26 @@ export function ttInitiateCheckout(items, value) {
   });
 }
 
+// CompletePayment browser twin for Events API dedup. Use the same event_id that
+// the server send receives.
+export function ttTrackCompletePayment(items, value, eventId) {
+  if (!ready() || !Array.isArray(items) || items.length === 0) return;
+  const contents = items.map((i) => {
+    const id = normalizeSku(i.product?.sku || i.product?.slug || i.product?.id);
+    return {
+      content_id: id,
+      content_type: 'product',
+      quantity: Number(i.quantity || 1),
+      price: Number(i.price ?? i.product?.price_usd ?? 0),
+    };
+  });
+  ttTrack('CompletePayment', {
+    content_type: 'product',
+    content_ids: contents.map((c) => c.content_id),
+    contents,
+    value: Number(value ?? 0),
+    currency: CURRENCY,
+  }, eventId);
+}
+
 export { newEventId };

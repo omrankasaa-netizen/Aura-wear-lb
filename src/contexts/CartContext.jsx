@@ -4,6 +4,7 @@ import { applyDiscountToPrice } from '@/lib/discounts';
 import { trackAddToCart } from '@/lib/meta';
 import { safeStorage } from '@/lib/safeStorage';
 import { ttAddToCart } from '@/lib/tiktok';
+import { gaAddToCart } from '@/lib/ga4';
 
 const CartContext = createContext();
 const STORAGE_KEY = 'aura-cart';
@@ -39,6 +40,7 @@ export function CartProvider({ children }) {
     const addPrice = parseFloat(variant?.price_usd || product.price_usd || 0);
     trackAddToCart(product, qty, addPrice);
     ttAddToCart(product, qty, addPrice);
+    gaAddToCart(product, qty, addPrice);
     setItems(prev => {
       const existing = prev.find(i => i.key === key);
       if (existing) {

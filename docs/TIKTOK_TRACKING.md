@@ -12,14 +12,18 @@ consent-gated; with no env vars set, nothing loads and nothing is sent.
 | `ViewContent` | Browser (`ttq.track`) | Product page view |
 | `AddToCart` | Browser (`ttq.track`) | Any add-to-cart (grid quick-add + PDP) |
 | `InitiateCheckout` | Browser (`ttq.track`) | Checkout page load with items |
-| `CompletePayment` | **Server only** (Events API) | Order placed — from trusted DB order data, idempotent (`tiktok_purchase_sent` flag on the order) |
+| `CompletePayment` | Browser + Server (Events API) | Order placed — browser pixel and server API use the same `event_id` for dedup |
 
 `content_id` is the normalized product SKU everywhere, matching the catalog
 feed `sku_id` and the Meta Pixel/CAPI ids, so TikTok can match events to
 catalog items.
 
-CompletePayment is deliberately NOT fired from the browser — the server event
-is the single source of truth (no dedup needed).
+CompletePayment is fired as a browser+server hybrid:
+
+- browser pixel emits `CompletePayment` immediately after successful placement,
+- server function sends Events API from trusted DB order data,
+- both use the same `event_id` so TikTok deduplicates the twin events,
+- server remains idempotent via `tiktok_purchase_sent` on the order.
 
 ## Consent
 

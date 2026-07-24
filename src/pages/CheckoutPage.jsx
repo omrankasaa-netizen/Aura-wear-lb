@@ -9,8 +9,10 @@ import { CheckCircle2, Tag, X, Loader2, Gift } from 'lucide-react';
 import { validatePromoCode, calcPromoDiscount } from '@/lib/discounts';
 import { useQuery } from '@tanstack/react-query';
 import { trackInitiateCheckout, trackPurchase, newEventId } from '@/lib/meta';
-import { ttInitiateCheckout } from '@/lib/tiktok';
+import { ttInitiateCheckout, ttTrackCompletePayment } from '@/lib/tiktok';
 import { reserveOrderStock, availableQty } from '@/lib/inventory';
+import { gaBeginCheckout, gaPurchase } from '@/lib/ga4';
+import { getAttributionContext } from '@/lib/utm';
 
 const ScrollToTop = ({ trigger }) => {
   useEffect(() => {
@@ -143,6 +145,7 @@ export default function CheckoutPage() {
     initiateFired.current = true;
     trackInitiateCheckout(items, subtotal);
     ttInitiateCheckout(items, subtotal);
+    gaBeginCheckout(items, subtotal);
   }, [items, subtotal]);
   const [promoInput, setPromoInput] = useState('');
   const [promoCode, setPromoCode] = useState(null);
@@ -321,6 +324,7 @@ export default function CheckoutPage() {
       }
 
       const order = await base44.entities.Order.create({
+        ...getAttributionContext(),
         customer_id: guestCustomerId,
         customer_name: form.customer_name,
         customer_phone: form.customer_phone,
@@ -452,16 +456,28 @@ export default function CheckoutPage() {
         console.error('Meta purchase tracking failed:', e);
       }
 
-      // TikTok CompletePayment — server-side only (the browser pixel deliberately
-      // does NOT fire a purchase event; the Events API send is the single source,
-      // from trusted order data). Best-effort, never blocks checkout.
+      // TikTok CompletePayment — browser pixel + Events API share one event_id so
+      // TikTok deduplicates the browser + server twins.
       try {
+        const tiktokEventId = newEventId();
+        ttTrackCompletePayment(items, grandTotal, tiktokEventId);
         base44.functions.invoke('tiktokTrackPurchase', {
           order_id: order.id,
-          event_id: newEventId(),
+          event_id: tiktokEventId,
         }).catch(() => {});
       } catch (e) {
         console.error('TikTok purchase tracking failed:', e);
+      }
+
+      try {
+        gaPurchase({
+          orderId: order.id,
+          transactionId: order.order_number || order.id,
+          items,
+          value: grandTotal,
+        });
+      } catch (e) {
+        console.error('GA4 purchase tracking failed:', e);
       }
 
       clearCart();

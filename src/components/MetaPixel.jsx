@@ -6,6 +6,8 @@ import {
   isPixelConfigured, getConsent,
 } from '@/lib/meta';
 import { initTikTokPixel, ttTrackPageView, onConsentGranted, isTikTokConfigured } from '@/lib/tiktok';
+import { initGa4, gaTrackPageView, isGa4Configured, onGa4ConsentGranted } from '@/lib/ga4';
+import { captureUtmFromSearch } from '@/lib/utm';
 
 // Boots the Meta + TikTok pixels (each a no-op if its VITE_* id env is unset),
 // fires a PageView on every SPA route change once consent is granted, and
@@ -20,21 +22,25 @@ export default function MetaPixel() {
   useEffect(() => {
     initMetaPixel();
     initTikTokPixel();
+    initGa4();
+    captureUtmFromSearch();
     // Ask when either pixel is configured and no consent decision is stored yet.
-    setAsk((isPixelConfigured() || isTikTokConfigured()) && getConsent() == null);
+    setAsk((isPixelConfigured() || isTikTokConfigured() || isGa4Configured()) && getConsent() == null);
   }, []);
 
   // PageView on client-side navigation (init already fired the first one).
   const firstRender = React.useRef(true);
   useEffect(() => {
     if (firstRender.current) { firstRender.current = false; return; }
+    captureUtmFromSearch(location.search);
     trackPageView();
     ttTrackPageView();
+    gaTrackPageView();
   }, [location.pathname, location.search]);
 
-  if ((!isPixelConfigured() && !isTikTokConfigured()) || !ask) return null;
+  if ((!isPixelConfigured() && !isTikTokConfigured() && !isGa4Configured()) || !ask) return null;
 
-  const accept = () => { grantConsent(); onConsentGranted(); setAsk(false); };
+  const accept = () => { grantConsent(); onConsentGranted(); onGa4ConsentGranted(); setAsk(false); };
   const decline = () => { denyConsent(); setAsk(false); };
 
   return (

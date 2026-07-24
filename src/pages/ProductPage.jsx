@@ -14,6 +14,7 @@ import { imageSrc, handleImageError } from '@/lib/imageFraming';
 import ImageLightbox from '@/components/storefront/ImageLightbox';
 import { trackViewContent } from '@/lib/meta';
 import { ttViewContent } from '@/lib/tiktok';
+import { gaViewItem } from '@/lib/ga4';
 
 function Accordion({ title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -83,6 +84,7 @@ export default function ProductPage() {
     const price = getDiscountedPrice(product) ?? product.price_usd;
     trackViewContent(product, price);
     ttViewContent(product, price);
+    gaViewItem(product, price);
   }, [product?.id]);
 
   if (!product) {

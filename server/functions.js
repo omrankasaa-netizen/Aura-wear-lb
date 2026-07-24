@@ -893,9 +893,10 @@ async function metaTrackPurchase({ order_id, event_id, event_source_url } = {}) 
   return { ok: !!result.sent, ...result };
 }
 
-// Server-side TikTok Events API CompletePayment. Authoritative + idempotent:
-// fires at most once per order (guarded by a flag on the order doc). Silent
-// no-op when the TikTok env vars are unset, so checkout is never affected.
+// Server-side TikTok Events API CompletePayment. Idempotent: fires at most once
+// per order (guarded by a flag on the order doc). Reuses the browser event_id
+// when provided so TikTok deduplicates browser + server twins.
+// Silent no-op when the TikTok env vars are unset, so checkout is never affected.
 async function tiktokTrackPurchase({ order_id, event_id } = {}) {
   if (!order_id) { const e = new Error('order_id required'); e.status = 400; throw e; }
   const order = getRecord('Order', order_id);
