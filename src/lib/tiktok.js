@@ -16,6 +16,7 @@ import { hasConsent, newEventId, normalizeSku } from '@/lib/meta';
 
 const PIXEL_ID = import.meta.env.VITE_TIKTOK_PIXEL_ID || '';
 const CURRENCY = 'USD';
+let lastTrackedPage = null;
 
 export function isTikTokConfigured() {
   return !!PIXEL_ID;
@@ -53,9 +54,9 @@ function injectPixel() {
 // Call once on app boot. Injects the pixel and, when the shopper already
 // granted consent on a previous visit, fires the initial page view.
 export function initTikTokPixel() {
-  if (!PIXEL_ID) return;
+  if (!PIXEL_ID || !hasConsent()) return;
   injectPixel();
-  if (hasConsent()) ttTrackPageView();
+  ttTrackPageView(true);
 }
 
 // Call from the consent banner's accept handler (after grantConsent()): counts
@@ -63,7 +64,7 @@ export function initTikTokPixel() {
 export function onConsentGranted() {
   if (!PIXEL_ID) return;
   injectPixel();
-  ttTrackPageView();
+  ttTrackPageView(true);
 }
 
 // Guard: only emit when configured AND consented AND ttq is present.
@@ -71,8 +72,16 @@ function ready() {
   return !!PIXEL_ID && typeof window !== 'undefined' && !!window.ttq && hasConsent();
 }
 
-export function ttTrackPageView() {
+function currentPageKey() {
+  if (typeof window === 'undefined') return '';
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+export function ttTrackPageView(force = false) {
   if (!ready() || typeof window.ttq.page !== 'function') return;
+  const pageKey = currentPageKey();
+  if (!force && pageKey && pageKey === lastTrackedPage) return;
+  lastTrackedPage = pageKey;
   window.ttq.page();
 }
 

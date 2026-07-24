@@ -1,5 +1,4 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 import { useLang } from '@/contexts/LanguageContext';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
@@ -57,15 +56,11 @@ export default function InstagramStrip() {
 
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
           {tiles.map((url, i) => (
-            <motion.a
+            <a
               key={i}
               href={instagram}
               target="_blank"
               rel="noopener"
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.35, delay: i * 0.04 }}
               className="aspect-square overflow-hidden bg-secondary group rounded-sm"
             >
               {url ? (
@@ -73,7 +68,7 @@ export default function InstagramStrip() {
               ) : (
                 <div className="w-full h-full flex items-center justify-center"><Instagram className="w-5 h-5 text-muted-foreground/30" /></div>
               )}
-            </motion.a>
+            </a>
           ))}
         </div>
       </div>

@@ -30,7 +30,7 @@ export default function MetaPixel() {
     if (firstRender.current) { firstRender.current = false; return; }
     trackPageView();
     ttTrackPageView();
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
   if ((!isPixelConfigured() && !isTikTokConfigured()) || !ask) return null;
 

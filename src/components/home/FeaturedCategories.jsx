@@ -1,6 +1,5 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { useLang } from '@/contexts/LanguageContext';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
@@ -34,7 +33,7 @@ export default function FeaturedCategories() {
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {tiles.map((c, i) => (
-            <motion.div key={c.slug} initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4, delay: i * 0.05 }}>
+            <div key={c.slug} className="opacity-100">
               <Link to={`/shop?category=${c.slug}`} className="group relative block aspect-square overflow-hidden bg-secondary rounded-sm">
                 {c.image ? (
                   <img src={cmsImageSrc(c.image, 'card')} alt={c.name} width={176} height={176} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -46,7 +45,7 @@ export default function FeaturedCategories() {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                 <span className="absolute bottom-3 left-3 font-display uppercase tracking-wide text-sm text-white">{c.name}</span>
               </Link>
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>

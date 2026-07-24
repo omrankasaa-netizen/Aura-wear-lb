@@ -6,8 +6,11 @@
 // after the shopper accepts tracking via the consent banner. The choice is
 // remembered in localStorage.
 
+import { safeStorage } from '@/lib/safeStorage';
+
 const PIXEL_ID = import.meta.env.VITE_META_PIXEL_ID || '';
 const CONSENT_KEY = 'aura-meta-consent'; // 'granted' | 'denied'
+let lastTrackedPage = null;
 
 export function isPixelConfigured() {
   return !!PIXEL_ID;
@@ -20,11 +23,11 @@ export function normalizeSku(sku) {
 }
 
 export function getConsent() {
-  try { return localStorage.getItem(CONSENT_KEY); } catch { return null; }
+  return safeStorage.getItem(CONSENT_KEY);
 }
 
 function storeConsent(value) {
-  try { localStorage.setItem(CONSENT_KEY, value); } catch { /* ignore */ }
+  safeStorage.setItem(CONSENT_KEY, value);
 }
 
 export function hasConsent() {
@@ -64,12 +67,10 @@ function injectPixel() {
 // already granted consent in a previous visit, re-grants + fires the initial
 // PageView.
 export function initMetaPixel() {
-  if (!PIXEL_ID) return;
+  if (!PIXEL_ID || !hasConsent()) return;
   injectPixel();
-  if (hasConsent()) {
-    window.fbq('consent', 'grant');
-    trackPageView();
-  }
+  window.fbq('consent', 'grant');
+  trackPageView(true);
 }
 
 export function grantConsent() {
@@ -77,11 +78,12 @@ export function grantConsent() {
   if (!PIXEL_ID) return;
   injectPixel();
   window.fbq('consent', 'grant');
-  trackPageView();
+  trackPageView(true);
 }
 
 export function denyConsent() {
   storeConsent('denied');
+  lastTrackedPage = null;
   if (PIXEL_ID && window.fbq) window.fbq('consent', 'revoke');
 }
 
@@ -99,8 +101,16 @@ export function newEventId() {
   return `evt_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-export function trackPageView() {
+function currentPageKey() {
+  if (typeof window === 'undefined') return '';
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+export function trackPageView(force = false) {
   if (!ready()) return;
+  const pageKey = currentPageKey();
+  if (!force && pageKey && pageKey === lastTrackedPage) return;
+  lastTrackedPage = pageKey;
   window.fbq('track', 'PageView');
 }
 
