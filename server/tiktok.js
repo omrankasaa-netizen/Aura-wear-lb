@@ -60,7 +60,7 @@ export function buildUserData({ email, phone, clientIp, userAgent, ttp, ttclid }
 export function buildContents(items = []) {
   const contents = [];
   for (const it of items) {
-    const id = normalizeSku(it?.sku);
+    const id = normalizeSku(it?.sku || it?.product_id || it?.id);
     if (!id) continue;
     const price = Number(it.unit_price_usd ?? it.price ?? it.item_price);
     contents.push({
