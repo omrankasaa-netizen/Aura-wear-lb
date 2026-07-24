@@ -3,18 +3,17 @@
 // token is mirrored in localStorage so the app's auth gating (which checks
 // appParams.token) runs the cookie-based me() call.
 import { ENTITIES } from '@/api/entities-list';
+import { safeStorage } from '@/lib/safeStorage';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 const SENTINEL_KEY = 'base44_access_token';
 
 function getSentinel() {
-  try { return localStorage.getItem(SENTINEL_KEY); } catch { return null; }
+  return safeStorage.getItem(SENTINEL_KEY);
 }
 function setSentinel(v) {
-  try {
-    if (v) localStorage.setItem(SENTINEL_KEY, v);
-    else localStorage.removeItem(SENTINEL_KEY);
-  } catch { /* ignore */ }
+  if (v) safeStorage.setItem(SENTINEL_KEY, v);
+  else safeStorage.removeItem(SENTINEL_KEY);
 }
 
 async function request(method, url, body) {

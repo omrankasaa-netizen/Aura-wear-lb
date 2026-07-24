@@ -8,11 +8,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="manifest" href="/manifest.json" />
 
-    <!-- Perf: warm up connections to the Meta Pixel host and the product-image
-         CDN so the first ad-click paint doesn't stall on DNS/TLS. dns-prefetch
-         is the fallback for browsers that ignore preconnect. -->
-    <link rel="preconnect" href="https://connect.facebook.net" crossorigin />
-    <link rel="dns-prefetch" href="https://connect.facebook.net" />
+    <!-- Keep first paint strictly first-party: Meta/TikTok are loaded only after
+         marketing consent, so their hosts are intentionally NOT preconnected
+         here. Warm up just the product-image CDN, which is needed for LCP. -->
     <link rel="preconnect" href="https://image.aura-lb.shop" crossorigin />
     <link rel="dns-prefetch" href="https://image.aura-lb.shop" />
 

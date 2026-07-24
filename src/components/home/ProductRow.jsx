@@ -15,14 +15,15 @@ export default function ProductRow({ title, titleAr, filter, viewAllLink }) {
     queryFn: () => base44.entities.Product.filter(filter, '-created_date', 12),
     staleTime: 60_000,
   });
+  const productIds = rawProducts.map((p) => p.id);
 
   const { data: allImages = [] } = useQuery({
-    queryKey: ['product-images-home', rawProducts.map(p => p.id).join(',')],
+    queryKey: ['product-images-home', productIds.join(',')],
     queryFn: async () => {
-      if (rawProducts.length === 0) return [];
-      return base44.entities.ProductImage.list('sort_order', 500);
+      if (productIds.length === 0) return [];
+      return base44.entities.ProductImage.filter({ product_id: productIds }, 'sort_order', 200);
     },
-    enabled: rawProducts.length > 0,
+    enabled: productIds.length > 0,
     staleTime: 60_000,
   });
 

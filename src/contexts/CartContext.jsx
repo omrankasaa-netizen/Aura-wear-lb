@@ -2,15 +2,15 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useDiscounts } from '@/contexts/DiscountContext';
 import { applyDiscountToPrice } from '@/lib/discounts';
 import { trackAddToCart } from '@/lib/meta';
+import { safeStorage } from '@/lib/safeStorage';
 import { ttAddToCart } from '@/lib/tiktok';
 
 const CartContext = createContext();
 const STORAGE_KEY = 'aura-cart';
 
 function loadCart() {
-  if (typeof window === 'undefined') return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = safeStorage.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -24,7 +24,7 @@ export function CartProvider({ children }) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      safeStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     } catch {
       /* storage unavailable (private mode / quota) — cart stays in memory */
     }

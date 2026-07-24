@@ -33,7 +33,7 @@ export default function HeroSection() {
             srcSet={`${cmsImageSrc(imgUrl, 'thumb')} 320w, ${cmsImageSrc(imgUrl, 'card')} 600w, ${cmsImageSrc(imgUrl, 'large')} 1200w`}
             sizes="100vw"
             width={1600} height={700}
-            alt="" loading="eager" fetchpriority="high" decoding="async" onError={handleImageError} className="absolute inset-0 w-full h-full object-cover" />
+            alt="" loading="eager" fetchPriority="high" decoding="async" onError={handleImageError} className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-secondary via-stone to-secondary" />
         )}
