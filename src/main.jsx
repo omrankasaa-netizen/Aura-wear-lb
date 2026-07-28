@@ -14,7 +14,7 @@ import { base44 } from '@/api/base44Client'
 // the components' own useQuery calls (identical queryKey/queryFn), and
 // failures simply let the components' own queries retry as before.
 queryClientInstance.prefetchQuery({
-  queryKey: ['cms-sections-home'],
+  queryKey: ['cms-sections-all'],
   queryFn: () => base44.entities.CmsSection.filter({}, 'sort_order', 50),
   staleTime: 60_000,
 })

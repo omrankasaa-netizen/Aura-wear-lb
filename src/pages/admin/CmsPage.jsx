@@ -5,8 +5,6 @@ import { base44 } from '@/api/base44Client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { logAction } from '@/lib/auditLog';
 import AccessDenied from './AccessDenied';
-import CmsHero from '@/components/admin/cms/CmsHero';
-import CmsAnnouncement from '@/components/admin/cms/CmsAnnouncement';
 import CmsHomepageBanners from '@/components/admin/cms/CmsHomepageBanners';
 import CmsFeatured from '@/components/admin/cms/CmsFeatured';
 import CmsMediaLibrary from '@/components/admin/cms/CmsMediaLibrary';
@@ -15,7 +13,7 @@ import CmsLegal from '@/components/admin/cms/CmsLegal';
 import CmsPaymentMethods from '@/components/admin/cms/CmsPaymentMethods';
 import CmsHomeSections from '@/components/admin/cms/CmsHomeSections';
 import CmsShopLook from '@/components/admin/cms/CmsShopLook';
-import { Layout, Image, Star, FolderOpen, HelpCircle, Scale, CreditCard, Instagram, LayoutGrid } from 'lucide-react';
+import { Image, Star, FolderOpen, HelpCircle, Scale, CreditCard, Instagram, LayoutGrid } from 'lucide-react';
 
 const TABS = [
   { key: 'banners', label: 'Homepage Banners', icon: Image },
@@ -69,6 +67,11 @@ export default function CmsPage() {
     return m;
   }, [sections]);
 
+  function invalidateCmsSectionQueries() {
+    qc.invalidateQueries({ queryKey: ['cms-sections'] });
+    qc.invalidateQueries({ queryKey: ['cms-sections-all'] });
+  }
+
   async function upsertSection(key, data) {
     const existing = sectionMap[key];
     if (existing) {
@@ -77,7 +80,7 @@ export default function CmsPage() {
       await base44.entities.CmsSection.create({ section_key: key, ...data });
     }
     await logAction({ action: 'cms_updated', entity: 'CmsSection', details: key, userName: currentUser?.email });
-    qc.invalidateQueries({ queryKey: ['cms-sections'] });
+    invalidateCmsSectionQueries();
   }
 
   if (!canAccess('manage_cms')) return <AdminLayout><AccessDenied /></AdminLayout>;
@@ -112,7 +115,7 @@ export default function CmsPage() {
               <CmsHomepageBanners
                 sections={sections}
                 onSave={upsertSection}
-                onRefresh={() => qc.invalidateQueries({ queryKey: ['cms-sections'] })}
+                onRefresh={invalidateCmsSectionQueries}
                 currentUser={currentUser}
                 campaigns={campaigns}
               />
