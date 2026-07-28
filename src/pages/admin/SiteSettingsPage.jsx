@@ -54,6 +54,9 @@ export default function SiteSettingsPage() {
     }
     await logAction({ action: 'site_settings_updated', entity: 'SiteSetting', userName: currentUser?.email });
     qc.invalidateQueries({ queryKey: ['site-settings'] });
+    qc.invalidateQueries({ queryKey: ['site-settings-admin'] });
+    qc.invalidateQueries({ queryKey: ['site-settings-shipping'] });
+    qc.invalidateQueries({ queryKey: ['site-settings-public'] });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);

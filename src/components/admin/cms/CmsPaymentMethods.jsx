@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { logAction } from '@/lib/auditLog';
@@ -70,6 +70,8 @@ export default function CmsPaymentMethods({ currentUser }) {
     }
     await logAction({ action: 'settings_updated', entity: 'SiteSetting', details: `${key}=${newVal}`, userName: currentUser?.email });
     qc.invalidateQueries({ queryKey: ['site-settings-admin'] });
+    qc.invalidateQueries({ queryKey: ['site-settings'] });
+    qc.invalidateQueries({ queryKey: ['site-settings-shipping'] });
     qc.invalidateQueries({ queryKey: ['site-settings-public'] });
     setSaving(p => ({ ...p, [key]: false }));
     setSaved(p => ({ ...p, [key]: true }));
