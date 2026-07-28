@@ -1,20 +1,14 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useLang } from '@/contexts/LanguageContext';
-import { base44 } from '@/api/base44Client';
-import { useQuery } from '@tanstack/react-query';
+import { useCmsSections } from '@/hooks/useCmsSections';
 import { BRAND } from '@/lib/brand';
 import { cmsImageSrc, handleImageError } from '@/lib/imageFraming';
 
 export default function HeroSection() {
   const { lang, t } = useLang();
-
-  const { data: sections = [] } = useQuery({
-    queryKey: ['cms-section', 'home_hero'],
-    queryFn: () => base44.entities.CmsSection.filter({ section_key: 'home_hero' }, 'sort_order', 1),
-    staleTime: 60_000,
-  });
-  const section = sections[0];
+  const { getSection } = useCmsSections();
+  const section = getSection('home_hero');
 
   const title = section ? (lang === 'ar' ? (section.title_ar || section.title) : section.title) : t('LEVEL UP YOUR AURA', 'ارفع مستوى حضورك');
   const body = section ? (lang === 'ar' ? (section.body_ar || section.body) : section.body) : t('Clean fits. Limited drops. Delivered across Lebanon.', 'قصّات نظيفة. دروبات محدودة. توصيل لكل لبنان.');

@@ -3,6 +3,7 @@ import { useLang } from '@/contexts/LanguageContext';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
+import { useCmsSections } from '@/hooks/useCmsSections';
 import { Instagram } from 'lucide-react';
 import { BRAND } from '@/lib/brand';
 import { handleImageError } from '@/lib/imageFraming';
@@ -10,6 +11,7 @@ import { handleImageError } from '@/lib/imageFraming';
 export default function InstagramStrip() {
   const { t, lang } = useLang();
   const settings = useSiteSettings();
+  const { getSection } = useCmsSections();
 
   const { data: assets = [] } = useQuery({
     queryKey: ['media-instagram'],
@@ -17,12 +19,7 @@ export default function InstagramStrip() {
     staleTime: 60_000,
   });
 
-  const { data: sections = [] } = useQuery({
-    queryKey: ['cms-section', 'home_instagram'],
-    queryFn: () => base44.entities.CmsSection.filter({ section_key: 'home_instagram' }, 'sort_order', 1),
-    staleTime: 60_000,
-  });
-  const section = sections[0];
+  const section = getSection('home_instagram');
   if (section && section.is_active === false) return null;
 
   const instagram = section?.link_url || settings.instagramUrl || BRAND.instagramUrl;

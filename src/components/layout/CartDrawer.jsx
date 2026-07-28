@@ -39,7 +39,20 @@ export default function CartDrawer() {
       if (items.length === 0) return [];
       const catIds = [...new Set(items.map(i => i.product.category_id).filter(Boolean))];
       const recIds = new Set(items.map(i => i.product.id));
-      const results = await base44.entities.Product.filter({ status: 'Active' }, '-is_featured', 50);
+      const primary = await base44.entities.Product.filter(
+        catIds.length ? { status: 'Active', category_id: catIds } : { status: 'Active' },
+        '-is_featured',
+        12,
+      );
+      const fallback = catIds.length && primary.length < 6
+        ? await base44.entities.Product.filter({ status: 'Active' }, '-is_featured', 12)
+        : [];
+      const seen = new Set();
+      const results = [...primary, ...fallback].filter((p) => {
+        if (!p?.id || seen.has(p.id)) return false;
+        seen.add(p.id);
+        return true;
+      });
       return results
         .filter(p => !recIds.has(p.id) && (catIds.includes(p.category_id) || p.is_featured || p.is_new))
         .filter(p => availableQty(p) > 0 || p.has_variants)
@@ -49,8 +62,12 @@ export default function CartDrawer() {
   });
 
   const { data: allImages = [] } = useQuery({
-    queryKey: ['cart-rec-images'],
-    queryFn: () => base44.entities.ProductImage.list('-created_date', 500),
+    queryKey: ['cart-rec-images', recommendations.map((p) => p.id)],
+    queryFn: () => {
+      const ids = recommendations.map((p) => p.id).filter(Boolean);
+      if (ids.length === 0) return [];
+      return base44.entities.ProductImage.filter({ product_id: ids }, 'sort_order', 120);
+    },
     enabled: recommendations.length > 0,
   });
 
