@@ -349,6 +349,22 @@ function sanitize(entity, record) {
   return record;
 }
 
+// ── Catalog cache headers ────────────────────────────────────────────────────
+// Sets public cache headers on GET requests for read-only catalog entities.
+// Cloudflare / CDN will cache these at the edge (max-age=60s, SWR=300s).
+// All other routes (auth, orders, customers, carts, admin, mutations) keep
+// whatever cache behavior they already have (no-store).
+const CATALOG_CACHE_ENTITIES = new Set([
+  'CmsSection', 'SiteSetting', 'Category', 'Product', 'ProductImage',
+  'ProductVariant', 'Collection', 'Review', 'Discount', 'Campaign',
+]);
+app.use('/api/entities/:entity', (req, res, next) => {
+  if (req.method === 'GET' && CATALOG_CACHE_ENTITIES.has(req.params.entity)) {
+    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+  }
+  next();
+});
+
 app.get('/api/entities/:entity', ensureEntity, (req, res) => {
   try {
     const user = getUserFromRequest(req);
