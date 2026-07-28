@@ -36,6 +36,93 @@ export function getProductBySlug(slug) {
   return rows[0] || null;
 }
 
+function pickPublicProductFields(product) {
+  return {
+    id: product.id,
+    slug: product.slug,
+    sku: product.sku,
+    name: product.name,
+    name_ar: product.name_ar,
+    description: product.description,
+    description_ar: product.description_ar,
+    short_description: product.short_description,
+    short_description_ar: product.short_description_ar,
+    price_usd: product.price_usd,
+    compare_at_price_usd: product.compare_at_price_usd,
+    image_url: product.image_url,
+    fit: product.fit,
+    status: product.status,
+    is_featured: product.is_featured,
+    is_new: product.is_new,
+    has_variants: product.has_variants,
+    stock_quantity: product.stock_quantity,
+    colors: product.colors,
+    sizes: product.sizes,
+    category_id: product.category_id,
+    subcategory_id: product.subcategory_id,
+  };
+}
+
+function pickPublicImageFields(image) {
+  return {
+    id: image.id,
+    product_id: image.product_id,
+    image_url: image.image_url,
+    url: image.url,
+    file_url: image.file_url,
+    variants: image.variants,
+    image_variants: image.image_variants,
+    is_primary: image.is_primary,
+    sort_order: image.sort_order,
+    color: image.color,
+  };
+}
+
+function pickPublicVariantFields(variant) {
+  return {
+    id: variant.id,
+    product_id: variant.product_id,
+    sku: variant.sku,
+    size: variant.size,
+    color: variant.color,
+    price_usd: variant.price_usd,
+    qty_on_hand: variant.qty_on_hand,
+    qty_reserved: variant.qty_reserved,
+  };
+}
+
+export function buildPreloadedProductPayload(product) {
+  const images = queryRecords('ProductImage', {
+    query: { product_id: product.id }, sort: 'sort_order', limit: 20,
+  }).map(pickPublicImageFields);
+  const variants = product.has_variants
+    ? queryRecords('ProductVariant', {
+      query: { product_id: product.id }, sort: 'size', limit: 50,
+    }).map(pickPublicVariantFields)
+    : [];
+  const publishedReviewsCount = queryRecords('Review', {
+    query: { product_id: product.id, is_published: true }, limit: 5000,
+  }).length;
+
+  return {
+    slug: product.slug,
+    product: pickPublicProductFields(product),
+    images,
+    variants,
+    publishedReviewsCount,
+  };
+}
+
+export function injectPreloadedProduct(template, payload) {
+  if (!payload || !payload.product) return template;
+  const headEnd = template.lastIndexOf('</head>');
+  if (headEnd === -1) return template;
+  // Escape `<` so no payload value can break out of the <script> element.
+  const safeJson = JSON.stringify(payload).replace(/</g, '\\u003c');
+  const script = `\n    <script>window.__PRELOADED_PRODUCT__ = ${safeJson};</script>\n`;
+  return template.slice(0, headEnd) + script + template.slice(headEnd);
+}
+
 // Aggregate rating from published reviews for JSON-LD. Returns null when the
 // product has no published reviews (schema omitted entirely in that case) or
 // when the Review table is unavailable. ratingValue is rounded to 1 decimal.

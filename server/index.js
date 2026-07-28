@@ -27,7 +27,9 @@ import { rewriteImageHostUrls } from './rewriteImageHost.js';
 import { optimizeAndStore, bufferFromBase64 } from './imageOptimize.js';
 import { buildFeedRow, buildFeedCsv, absoluteUrl, publicBaseUrl } from './meta.js';
 import { buildTiktokFeedRow, buildTiktokFeedCsv, isTikTokConfigured } from './tiktok.js';
-import { getProductBySlug, injectProductMeta } from './productMeta.js';
+import {
+  getProductBySlug, injectProductMeta, buildPreloadedProductPayload, injectPreloadedProduct,
+} from './productMeta.js';
 
 // Build the verification-code email HTML.
 function otpEmailHtml(code) {
@@ -359,8 +361,20 @@ const CATALOG_CACHE_ENTITIES = new Set([
   'ProductVariant', 'Collection', 'Review', 'Discount', 'Campaign',
 ]);
 app.use('/api/entities/:entity', (req, res, next) => {
-  if (req.method === 'GET' && CATALOG_CACHE_ENTITIES.has(req.params.entity)) {
-    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+  if (req.method === 'GET') {
+    const user = getUserFromRequest(req);
+    const isAdminRead = !!user && ['admin', 'super_admin', 'staff'].includes(user.role);
+    // Admin reads for mutable settings must bypass caches so admin saves are
+    // visible immediately after write.
+    if (isAdminRead && (req.params.entity === 'SiteSetting' || req.params.entity === 'ShippingZone')) {
+      res.set('Cache-Control', 'no-store');
+      res.set('Vary', 'Cookie');
+      return next();
+    }
+    // Keep fast public cache behavior for unauthenticated storefront catalog reads.
+    if (!user && CATALOG_CACHE_ENTITIES.has(req.params.entity)) {
+      res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    }
   }
   next();
 });
@@ -642,7 +656,9 @@ if (fs.existsSync(DIST)) {
       // Unknown slug: serve the SPA shell (the client renders its own NotFound
       // UI) but with a real HTTP 404 so crawlers stop indexing dead URLs.
       if (!product) return res.status(404).type('html').send(template);
-      res.type('html').send(injectProductMeta(template, product));
+      const withMeta = injectProductMeta(template, product);
+      const withPreload = injectPreloadedProduct(withMeta, buildPreloadedProductPayload(product));
+      res.type('html').send(withPreload);
     } catch (e) {
       console.error('[productMeta] inject failed:', e?.message);
       next();

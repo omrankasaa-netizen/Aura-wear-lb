@@ -16,6 +16,26 @@ import { trackViewContent } from '@/lib/meta';
 import { ttViewContent } from '@/lib/tiktok';
 import { gaViewItem } from '@/lib/ga4';
 
+function getPreloadedProduct(slug) {
+  if (typeof window === 'undefined') return null;
+  const payload = window.__PRELOADED_PRODUCT__;
+  if (!payload || typeof payload !== 'object') return null;
+  if (!payload.product || payload.product.slug !== slug) return null;
+  const p = payload.product;
+  const hasRequired =
+    p &&
+    typeof p.id === 'string' &&
+    typeof p.slug === 'string' &&
+    typeof p.name === 'string' &&
+    Number.isFinite(Number(p.price_usd));
+  if (!hasRequired) return null;
+  return {
+    product: p,
+    images: Array.isArray(payload.images) ? payload.images : [],
+    variants: Array.isArray(payload.variants) ? payload.variants : [],
+  };
+}
+
 function Accordion({ title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -34,6 +54,7 @@ export default function ProductPage() {
   const { t, lang } = useLang();
   const { addItem, setIsOpen } = useCart();
   const qc = useQueryClient();
+  const preload = getPreloadedProduct(slug);
   const [selectedColor, setSelectedColor] = useState('');
   const [selectedSize, setSelectedSize] = useState('');
   const [qty, setQty] = useState(1);
@@ -48,6 +69,7 @@ export default function ProductPage() {
   const { data: products = [] } = useQuery({
     queryKey: ['product', slug],
     queryFn: () => base44.entities.Product.filter({ slug }, 'slug', 1),
+    initialData: preload?.product ? [preload.product] : undefined,
   });
   const product = products[0];
 
@@ -55,12 +77,14 @@ export default function ProductPage() {
     queryKey: ['product-images', product?.id],
     queryFn: () => base44.entities.ProductImage.filter({ product_id: product.id }, 'sort_order', 20),
     enabled: !!product?.id,
+    initialData: preload?.product?.id === product?.id ? preload.images : undefined,
   });
 
   const { data: variants = [] } = useQuery({
     queryKey: ['product-variants', product?.id],
     queryFn: () => base44.entities.ProductVariant.filter({ product_id: product.id }, 'size', 50),
     enabled: !!product?.id && product?.has_variants,
+    initialData: preload?.product?.id === product?.id ? preload.variants : undefined,
   });
 
   const { data: reviews = [] } = useQuery({

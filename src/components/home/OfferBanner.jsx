@@ -1,8 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useLang } from '@/contexts/LanguageContext';
-import { base44 } from '@/api/base44Client';
-import { useQuery } from '@tanstack/react-query';
+import { useCmsSections } from '@/hooks/useCmsSections';
 import { cmsImageSrc, handleImageError } from '@/lib/imageFraming';
 
 // Default promo banner copy. Used as a graceful fallback before any CMS content
@@ -18,13 +17,8 @@ const DEFAULT_OFFER = {
 
 export default function OfferBanner() {
   const { lang } = useLang();
-
-  const { data: sections = [] } = useQuery({
-    queryKey: ['cms-section', 'home_offer_banner'],
-    queryFn: () => base44.entities.CmsSection.filter({ section_key: 'home_offer_banner' }, 'sort_order', 1),
-    staleTime: 60_000,
-  });
-  const section = sections[0];
+  const { getSection } = useCmsSections();
+  const section = getSection('home_offer_banner');
 
   // Toggle off -> hide. No row yet -> render defaults (graceful pre-seed fallback).
   if (section && section.is_active === false) return null;
