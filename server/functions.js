@@ -872,6 +872,34 @@ async function upsertCustomerForOrder(body) {
 // at most once per order (guarded by a flag on the order doc) and reuses the
 // browser event_id so Meta deduplicates the browser + server events. Silent
 // no-op when the CAPI env vars are unset, so checkout is never affected.
+function resolveMetaPurchaseEventTime(order) {
+  // DB convention: nowIso() = new Date().toISOString() — always UTC with 'Z'.
+  // Defensive: append 'Z' when the stored string has no timezone marker so
+  // Date.parse() never silently interprets it as local time (Lebanon UTC+3
+  // would push event_time 3 hours into the future vs Meta UTC).
+  const nowSec = Math.floor(Date.now() / 1000);
+  let eventTime = nowSec;
+  if (order?.created_date) {
+    const raw = String(order.created_date);
+    // Keep existing tz marker (Z / +HH:MM / -HH:MM); append 'Z' only when absent.
+    const utcStr = /[Zz]|[+-]\d{2}:?\d{2}$/.test(raw) ? raw : `${raw}Z`;
+    const parsed = Math.floor(Date.parse(utcStr) / 1000);
+    if (Number.isFinite(parsed)) eventTime = parsed;
+  }
+  // Clamp: Meta rejects events >7 days in the past or >60s in the future.
+  const SEVEN_DAYS_SEC = 7 * 24 * 60 * 60;
+  if (eventTime < nowSec - SEVEN_DAYS_SEC || eventTime > nowSec + 60) {
+    console.warn('[metaCapi] Purchase event_time outside Meta window — using now', {
+      order_id: order?.id,
+      stored_event_time: eventTime,
+      stored_event_time_iso: new Date(eventTime * 1000).toISOString(),
+      now_sec: nowSec,
+    });
+    eventTime = nowSec;
+  }
+  return eventTime;
+}
+
 async function metaTrackPurchase({ order_id, event_id, event_source_url } = {}) {
   if (!order_id) { const e = new Error('order_id required'); e.status = 400; throw e; }
   const order = getRecord('Order', order_id);
@@ -880,9 +908,11 @@ async function metaTrackPurchase({ order_id, event_id, event_source_url } = {}) 
   if (!isCapiConfigured()) return { ok: true, skipped: 'not_configured' };
 
   const items = queryRecords('OrderItem', { query: { order_id } });
+  const eventTime = resolveMetaPurchaseEventTime(order);
   const result = await sendPurchaseCapi(order, items, {
     eventId: event_id || order_id,
     eventSourceUrl: event_source_url,
+    eventTime,
   });
   if (result.sent) {
     updateRecord('Order', order_id, {

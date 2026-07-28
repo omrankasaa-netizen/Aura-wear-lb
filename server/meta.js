@@ -138,10 +138,14 @@ function hashPhone(phone) {
 
 // Build the CAPI Purchase payload from an order + its items. Exported for tests.
 export function buildPurchasePayload(order, items, opts = {}) {
+  const defaultNow = Math.floor(Date.now() / 1000);
+  const rawEventTime = opts.eventTime ?? opts.now ?? defaultNow;
+  const eventTime = Number.isFinite(Number(rawEventTime))
+    ? Math.floor(Number(rawEventTime))
+    : defaultNow;
   const {
     eventId = order.id,
     eventSourceUrl = `${publicBaseUrl()}/checkout`,
-    now = Math.floor(Date.now() / 1000),
   } = opts;
 
   const contents = (items || []).map((it) => ({
@@ -158,7 +162,7 @@ export function buildPurchasePayload(order, items, opts = {}) {
 
   const event = {
     event_name: 'Purchase',
-    event_time: now,
+    event_time: eventTime,
     event_id: eventId,
     action_source: 'website',
     event_source_url: eventSourceUrl,
@@ -188,6 +192,19 @@ export async function sendPurchaseCapi(order, items, opts = {}) {
   const pixelId = process.env.AURA_META_PIXEL_ID;
   const token = process.env.AURA_META_CAPI_ACCESS_TOKEN;
   const payload = buildPurchasePayload(order, items, opts);
+  const event = payload?.data?.[0];
+  const userData = event?.user_data;
+  const eventId = event?.event_id;
+  // DEBUG: set META_DEBUG=true to verify outgoing event_time values in Test Events.
+  if (process.env.META_DEBUG === 'true' && event) {
+    console.log('[metaCapi:DEBUG]', {
+      event_name: event.event_name,
+      event_time: event.event_time,
+      event_time_utc: new Date(event.event_time * 1000).toISOString(),
+      fbc_attached: !!userData?.fbc,
+      event_id: eventId ?? null,
+    });
+  }
   const url = `https://graph.facebook.com/${GRAPH_VERSION}/${pixelId}/events?access_token=${encodeURIComponent(token)}`;
 
   try {
