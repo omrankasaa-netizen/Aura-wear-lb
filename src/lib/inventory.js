@@ -30,6 +30,23 @@ export async function releaseOrderStock(orderId) {
   return res.data;
 }
 
+/**
+ * Edit an order's line items (admin). The server atomically releases the old
+ * lines, validates + applies the new ones, rewrites OrderItems, and
+ * recalculates totals — or rolls everything back and returns
+ * { ok: false, shortages } on insufficient stock.
+ * items: [{ product_id, size, color, quantity, unit_price_usd? }]
+ */
+export async function editOrderItems(orderId, items, note) {
+  const res = await base44.functions.invoke('inventoryEngine', {
+    action: 'edit_order_items',
+    order_id: orderId,
+    items,
+    note: note || '',
+  });
+  return res.data;
+}
+
 export async function manualStockAdjust({ productId, variantSku, newQty, movementType, reason }) {
   const res = await base44.functions.invoke('inventoryEngine', {
     action: 'manual_adjust',
