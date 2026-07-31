@@ -146,6 +146,12 @@ function reserveStock({ order_id }, user) {
     const shortages = [];
     const plan = [];
     // Pass 1 — read fresh availability for every line; collect shortages.
+    // `planned` accumulates quantities already earmarked by earlier lines
+    // targeting the SAME variant/product, so duplicate lines can't each
+    // validate against the same pool and oversell.
+    const planned = new Map();
+    const claimed = (key) => planned.get(key) || 0;
+    const claim = (key, qty) => planned.set(key, claimed(key) + qty);
     for (const item of items) {
       const { product, variant } = resolveLineTarget(item);
       if (!product) {
@@ -157,17 +163,21 @@ function reserveStock({ order_id }, user) {
           shortages.push({ name: item.product_name, available: 0, needed: item.quantity, reason: 'Variant not found' });
           continue;
         }
-        const available = (variant.qty_on_hand || 0) - (variant.qty_reserved || 0);
+        const key = `v:${variant.id}`;
+        const available = (variant.qty_on_hand || 0) - (variant.qty_reserved || 0) - claimed(key);
         if (available < item.quantity) {
           shortages.push({ name: `${item.product_name} (${[item.size, item.color].filter(Boolean).join(', ')})`, available, needed: item.quantity });
         } else {
+          claim(key, item.quantity);
           plan.push({ variant, product, item });
         }
       } else {
-        const available = (product.stock_quantity || 0) - (product.qty_reserved || 0);
+        const key = `p:${product.id}`;
+        const available = (product.stock_quantity || 0) - (product.qty_reserved || 0) - claimed(key);
         if (available < item.quantity) {
           shortages.push({ name: item.product_name, available, needed: item.quantity });
         } else {
+          claim(key, item.quantity);
           plan.push({ product, item });
         }
       }
@@ -177,16 +187,21 @@ function reserveStock({ order_id }, user) {
     // Pass 2 — hold the stock. qty_on_hand is untouched; only reserved rises.
     const movements = [];
     for (const { variant, product, item } of plan) {
+      // Re-read inside the transaction: multiple lines can target the SAME
+      // variant/product (e.g. bulk import rows), and the pass-1 snapshots are
+      // stale after the first update — using them loses earlier increments.
       if (variant) {
-        const prev = variant.qty_reserved || 0;
+        const fresh = getRecord('ProductVariant', variant.id);
+        const prev = fresh?.qty_reserved || 0;
         const next = prev + item.quantity;
         updateRecord('ProductVariant', variant.id, { qty_reserved: next });
-        movements.push({ product_id: item.product_id, variant_sku: variant.variant_sku, type: 'Reserved', quantity: -item.quantity, previous_stock: (variant.qty_on_hand || 0) - prev, new_stock: (variant.qty_on_hand || 0) - next, reason, created_at: nowIso(), created_by: by });
+        movements.push({ product_id: item.product_id, variant_sku: variant.variant_sku, type: 'Reserved', quantity: -item.quantity, previous_stock: (fresh?.qty_on_hand || 0) - prev, new_stock: (fresh?.qty_on_hand || 0) - next, reason, created_at: nowIso(), created_by: by });
       } else {
-        const prev = product.qty_reserved || 0;
+        const fresh = getRecord('Product', item.product_id);
+        const prev = fresh?.qty_reserved || 0;
         const next = prev + item.quantity;
         updateRecord('Product', item.product_id, { qty_reserved: next });
-        movements.push({ product_id: item.product_id, type: 'Reserved', quantity: -item.quantity, previous_stock: (product.stock_quantity || 0) - prev, new_stock: (product.stock_quantity || 0) - next, reason, created_at: nowIso(), created_by: by });
+        movements.push({ product_id: item.product_id, type: 'Reserved', quantity: -item.quantity, previous_stock: (fresh?.stock_quantity || 0) - prev, new_stock: (fresh?.stock_quantity || 0) - next, reason, created_at: nowIso(), created_by: by });
       }
     }
     if (movements.length) bulkCreate('InventoryMovement', movements);
@@ -1210,6 +1225,142 @@ function parseInvoiceText(text) {
   return out;
 }
 
+// ─── Bulk CSV order import (staff/admin) ─────────────────────────────────────
+// Rows are grouped by phone number: one order per unique customer_phone, one
+// line per row. Stock is reserved per order via the same all-or-nothing
+// reserveStock path as manual orders; an order that can't be fully reserved is
+// rolled back (its docs are deleted) and reported as failed.
+// Row shape: { customer_name, customer_phone, city, address, product, size,
+//   color, quantity, unit_price, delivery_fee, discount, notes }
+// `product` matches by SKU first (case-insensitive), then exact name.
+function bulkCreateOrders({ rows }, user) {
+  if (!Array.isArray(rows) || !rows.length) return { _status: 400, error: 'rows array is required' };
+  if (rows.length > 500) return { _status: 400, error: 'Max 500 rows per import' };
+
+  const clean = (v) => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v).trim());
+  const num = (v, dflt = 0) => {
+    const n = Number(clean(v).replace(/[$,]/g, ''));
+    return Number.isFinite(n) && n >= 0 ? n : dflt;
+  };
+
+  // Group rows by phone (order of first appearance preserved).
+  const groups = new Map();
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i] || {};
+    const phone = clean(r.customer_phone).replace(/[\s\-/]/g, '');
+    const key = phone || `__norphone_${i}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ ...r, _row: i + 1, _phone: phone });
+  }
+
+  const by = user?.email || 'admin';
+  const results = [];
+  let created = 0;
+
+  for (const groupRows of groups.values()) {
+    const first = groupRows[0];
+    const label = clean(first.customer_name) || first._phone || `row ${first._row}`;
+    try {
+      if (!clean(first.customer_name)) throw new Error(`row ${first._row}: customer_name is required`);
+      if (!first._phone) throw new Error(`row ${first._row}: customer_phone is required`);
+
+      // Resolve product lines.
+      const lines = [];
+      for (const r of groupRows) {
+        const ref = clean(r.product);
+        if (!ref) throw new Error(`row ${r._row}: product (SKU or name) is required`);
+        const low = ref.toLowerCase();
+        const product = queryRecords('Product', { limit: 1000 })
+          .find((p) => (p.sku && p.sku.toLowerCase() === low) || p.name.toLowerCase() === low);
+        if (!product) throw new Error(`row ${r._row}: product "${ref}" not found (match by SKU or exact name)`);
+        const qty = Math.max(1, Math.round(num(r.quantity, 1)));
+        const size = clean(r.size);
+        const color = clean(r.color);
+        if (product.has_variants) {
+          const variants = queryRecords('ProductVariant', { query: { product_id: product.id } });
+          const v = variants.find((x) => (size ? x.size === size : true) && (color ? x.color === color : true));
+          if (!v && variants.length) throw new Error(`row ${r._row}: variant ${[size, color].filter(Boolean).join('/')} not found for "${ref}"`);
+        }
+        const unit = clean(r.unit_price) ? num(r.unit_price) : (Number(product.price_usd) || 0);
+        lines.push({ product, qty, size, color, unit, row: r._row });
+      }
+
+      const subtotal = lines.reduce((s, l) => s + l.unit * l.qty, 0);
+      const discount = num(first.discount, 0);
+      const delivery = num(first.delivery_fee, 0);
+      const grand = Math.max(0, subtotal - discount) + delivery;
+
+      let order_number;
+      do {
+        order_number = `AURA-${Math.floor(Math.random() * 90000) + 10000}`;
+      } while (queryRecords('Order', { query: { order_number }, limit: 1 }).length);
+
+      const order = createRecord('Order', {
+        order_number,
+        order_date: nowIso(),
+        customer_name: clean(first.customer_name),
+        customer_phone: first._phone,
+        city: clean(first.city),
+        street: clean(first.address),
+        delivery_fee_usd: delivery,
+        channel: clean(first.channel) || 'bulk_import',
+        payment_method: clean(first.payment_method) || 'cod',
+        subtotal_usd: subtotal,
+        discount_usd: discount,
+        grand_total_usd: grand,
+        order_status: 'New',
+        stock_committed: false,
+        notes: clean(first.notes),
+      });
+
+      for (const l of lines) {
+        createRecord('OrderItem', {
+          order_id: order.id,
+          product_id: l.product.id,
+          product_name: l.product.name,
+          sku: l.product.sku || '',
+          size: l.size,
+          color: l.color,
+          quantity: l.qty,
+          unit_price_usd: l.unit,
+          line_total_usd: l.unit * l.qty,
+        });
+      }
+
+      const reservation = reserveStock({ order_id: order.id }, user);
+      if (!reservation?.ok) {
+        const names = (reservation?.shortages || []).map((s) => s.name).filter(Boolean).join(', ');
+        // Roll back the unfulfillable order entirely.
+        for (const it of queryRecords('OrderItem', { query: { order_id: order.id } })) deleteRecord('OrderItem', it.id);
+        deleteRecord('Order', order.id);
+        throw new Error(`insufficient stock: ${names || 'unavailable'}`);
+      }
+
+      createRecord('OrderStatusHistory', {
+        order_id: order.id,
+        status: 'New',
+        note: 'Order created via bulk CSV import',
+        changed_by: by,
+        changed_at: nowIso(),
+      });
+      createRecord('AuditLog', {
+        action: 'created',
+        entity: 'Order',
+        entity_id: order.id,
+        details: `${order_number} (bulk import)`,
+        user_name: by,
+        created_at: nowIso(),
+      });
+      created++;
+      results.push({ customer: label, ok: true, order_number, grand_total_usd: grand });
+    } catch (e) {
+      results.push({ customer: label, ok: false, error: e.message });
+    }
+  }
+
+  return { ok: true, created, failed: results.length - created, results };
+}
+
 async function scanInvoice({ image_base64, media_type }) {
   if (!image_base64 || typeof image_base64 !== 'string' || image_base64.length < 100) {
     return { _status: 400, error: 'image_base64 is required' };
@@ -1220,41 +1371,59 @@ async function scanInvoice({ image_base64, media_type }) {
   const mediaType = /^image\/(jpeg|jpg|png|webp)$/.test(media_type || '') ? media_type : 'image/jpeg';
 
   // Engine 1: Gemini (Google vision LLM) — structured extraction in one call.
+  // Google retires model IDs on a fast cadence (gemini-2.0-flash shut down
+  // 2026-06-01 and started returning instant 404s — that was the "scan fails
+  // immediately" outage). So we walk a fallback chain: on a 404/400 "model
+  // not found" we try the next known-live model instead of dying.
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey) {
-    const model = process.env.SCAN_INVOICE_GEMINI_MODEL || 'gemini-2.0-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: INVOICE_SCAN_PROMPT },
-              { inline_data: { mime_type: mediaType, data: image_base64 } },
-            ],
-          }],
-          generationConfig: { temperature: 0, maxOutputTokens: 800, responseMimeType: 'application/json' },
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        console.error('[scanInvoice] gemini error', res.status, data?.error?.message || '');
-        return { _status: 502, error: `Gemini error (${res.status}). Check GEMINI_API_KEY/model name.` };
+    const preferred = process.env.SCAN_INVOICE_GEMINI_MODEL;
+    const chain = [preferred, 'gemini-2.5-flash', 'gemini-3-flash', 'gemini-3.5-flash', 'gemini-2.5-flash-lite', 'gemini-1.5-flash']
+      .filter(Boolean)
+      .filter((m, i, a) => a.indexOf(m) === i);
+    let lastErr = '';
+    for (const model of chain) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: INVOICE_SCAN_PROMPT },
+                { inline_data: { mime_type: mediaType, data: image_base64 } },
+              ],
+            }],
+            generationConfig: { temperature: 0, maxOutputTokens: 800, responseMimeType: 'application/json' },
+          }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          const msg = data?.error?.message || '';
+          console.error('[scanInvoice] gemini error', model, res.status, msg);
+          lastErr = `Gemini error (${res.status})`;
+          // Model retired/unknown → try next in chain; other errors (auth,
+          // quota) won't be fixed by switching models.
+          if (res.status === 404 || (res.status === 400 && /model/i.test(msg))) continue;
+          if (res.status === 401 || res.status === 403) return { _status: 502, error: 'Gemini rejected the API key — check GEMINI_API_KEY in Railway.' };
+          if (res.status === 429) return { _status: 502, error: 'Gemini rate limit hit — wait a minute and retry.' };
+          return { _status: 502, error: `Gemini error (${res.status}). Try again.` };
+        }
+        const content = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        let parsed = null;
+        try { parsed = JSON.parse(content); } catch {
+          const m = content.match(/\{[\s\S]*\}/);
+          if (m) { try { parsed = JSON.parse(m[0]); } catch { /* fall through */ } }
+        }
+        if (!parsed) return { _status: 502, error: 'Gemini returned an unreadable result — try a clearer photo.' };
+        return { ok: true, engine: `gemini:${model}`, fields: sanitizeScanFields(parsed) };
+      } catch (e) {
+        console.error('[scanInvoice] gemini call failed:', model, e?.message);
+        lastErr = 'Could not reach Gemini';
       }
-      const content = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      let parsed = null;
-      try { parsed = JSON.parse(content); } catch {
-        const m = content.match(/\{[\s\S]*\}/);
-        if (m) { try { parsed = JSON.parse(m[0]); } catch { /* fall through */ } }
-      }
-      if (!parsed) return { _status: 502, error: 'Gemini returned an unreadable result — try a clearer photo.' };
-      return { ok: true, engine: 'gemini', fields: sanitizeScanFields(parsed) };
-    } catch (e) {
-      console.error('[scanInvoice] gemini call failed:', e?.message);
-      return { _status: 502, error: 'Could not reach Gemini — try again.' };
     }
+    return { _status: 502, error: `${lastErr} — check GEMINI_API_KEY/model availability.` };
   }
 
   // Engine 2: OpenAI-compatible vision LLM endpoint.
@@ -1365,6 +1534,7 @@ const REGISTRY = {
   listUsers,
   setUserRole,
   scanInvoice,
+  bulkCreateOrders,
   ...ADMIN_TOOLS,
 };
 
@@ -1388,6 +1558,7 @@ const FUNCTION_GUARDS = {
   listUsers: 'super_admin',
   setUserRole: 'super_admin',
   scanInvoice: 'staff',
+  bulkCreateOrders: 'staff',
   ...ADMIN_TOOL_GUARDS,
 };
 

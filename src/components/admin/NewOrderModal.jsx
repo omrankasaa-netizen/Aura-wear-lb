@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
-import { X, Plus, Trash2, Camera, Loader2 } from 'lucide-react';
+import { X, Plus, Trash2, Camera, Upload, FileSpreadsheet, Download, Loader2 } from 'lucide-react';
 import { logAction } from '@/lib/auditLog';
 import { useLang } from '@/contexts/LanguageContext';
 import { useDiscounts } from '@/contexts/DiscountContext';
@@ -46,6 +46,8 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
   const [scanErr, setScanErr] = useState('');
   const [scannedAmount, setScannedAmount] = useState(null); // { amount, currency }
   const invoiceInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const csvInputRef = useRef(null);
 
   // Resize the photo to max ~1600px on the long edge and re-encode as JPEG
   // (~85%). Falls back to the raw file if canvas decoding fails (e.g. HEIC
@@ -125,6 +127,8 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
     } finally {
       setScanning(false);
       if (invoiceInputRef.current) invoiceInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+      if (csvInputRef.current) csvInputRef.current.value = '';
     }
   }
 
@@ -297,14 +301,31 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
               className="hidden"
               onChange={e => handleInvoiceFile(e.target.files?.[0])}
             />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={e => handleInvoiceFile(e.target.files?.[0])}
+            />
+            <button
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={scanning}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
+              title={t('Open the camera and photograph the invoice — name, phone, address and amount are filled in automatically', 'افتح الكاميرا وصوّر الفاتورة — الاسم والهاتف والعنوان والمبلغ تُعبأ تلقائياً')}
+            >
+              {scanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+              {scanning ? t('Scanning…', 'جارٍ المسح…') : t('Scan Invoice', 'مسح فاتورة')}
+            </button>
             <button
               onClick={() => invoiceInputRef.current?.click()}
               disabled={scanning}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 text-primary text-xs font-medium hover:bg-primary/15 disabled:opacity-50"
-              title={t('Upload an invoice photo — name, phone, address and amount are filled in automatically', 'ارفع صورة الفاتورة — الاسم والهاتف والعنوان والمبلغ تُعبأ تلقائياً')}
+              title={t('Upload an invoice photo from your device', 'ارفع صورة فاتورة من جهازك')}
             >
-              {scanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
-              {scanning ? t('Scanning…', 'جارٍ المسح…') : t('Scan Invoice', 'مسح فاتورة')}
+              {scanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              {t('Upload', 'رفع')}
             </button>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-4 h-4" /></button>
           </div>
