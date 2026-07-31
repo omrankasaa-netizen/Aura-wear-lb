@@ -77,6 +77,15 @@ export default function CheckoutPage() {
     siteSettings.paymentCardEnabled && { key: 'Card', label: t('Credit/Debit Card', 'بطاقة ائتمان') },
   ].filter(Boolean);
 
+  // ── Checkout draft persistence ──────────────────────────────────────────
+  // Going back to the cart to fix a mistake used to lose everything typed
+  // here. The draft (contact/address/gift fields — never the password) is
+  // kept in sessionStorage and restored on return; cleared on success.
+  const DRAFT_KEY = 'aura_checkout_draft_v1';
+  const [savedDraft] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem(DRAFT_KEY)) || {}; } catch { return {}; }
+  });
+
   const [form, setForm] = useState({
     customer_name: currentUser?.full_name || '',
     customer_phone: currentUser?.phone || '',
@@ -90,9 +99,10 @@ export default function CheckoutPage() {
     shipping_zone_id: '',
     payment_method: currentUser?.preferred_payment || 'Cash on Delivery',
     notes: '',
+    ...(savedDraft.form || {}),
   });
 
-  const [createAccount, setCreateAccount] = useState(false);
+  const [createAccount, setCreateAccount] = useState(savedDraft.createAccount === true);
   const [accountPassword, setAccountPassword] = useState('');
   const [accountPasswordError, setAccountPasswordError] = useState('');
   const [accountStatus, setAccountStatus] = useState(''); // '' | 'created' | 'existing'
@@ -104,6 +114,7 @@ export default function CheckoutPage() {
     gift_wrapping: false,
     hide_invoice_price: false,
     gift_message: '',
+    ...(savedDraft.gift || {}),
   });
   const GIFT_MSG_MAX = 150;
   function setGiftField(k, v) {
@@ -157,9 +168,18 @@ export default function CheckoutPage() {
   const [promoError, setPromoError] = useState('');
   const [promoLoading, setPromoLoading] = useState(false);
   const [phoneError, setPhoneError] = useState('');
-  const [phoneCountry, setPhoneCountry] = useState(DEFAULT_COUNTRY);
-  const [phoneHasWhatsApp, setPhoneHasWhatsApp] = useState(true);
+  const [phoneCountry, setPhoneCountry] = useState(savedDraft.phoneCountry || DEFAULT_COUNTRY);
+  const [phoneHasWhatsApp, setPhoneHasWhatsApp] = useState(savedDraft.phoneHasWhatsApp !== false);
   const [altLebanesePhone, setAltLebanesePhone] = useState('');
+
+  // Save the draft on every change (survives cart trips, not tab close).
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
+        form, gift, phoneCountry, phoneHasWhatsApp, altLebanesePhone, createAccount,
+      }));
+    } catch { /* storage full/blocked — non-fatal */ }
+  }, [form, gift, phoneCountry, phoneHasWhatsApp, altLebanesePhone, createAccount]);
   const [stockError, setStockError] = useState('');
 
   const isFreeShipping = promoCode?.type === 'free_shipping';
@@ -558,6 +578,7 @@ export default function CheckoutPage() {
         console.error('GA4 purchase tracking failed:', e);
       }
 
+      sessionStorage.removeItem(DRAFT_KEY);
       clearCart();
       setSuccess(order.order_number);
     } catch (err) {
@@ -625,7 +646,13 @@ export default function CheckoutPage() {
       )}
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-        <h1 className="font-display font-bold uppercase text-2xl sm:text-3xl tracking-tight mb-6">{t('Checkout', 'إتمام الطلب')}</h1>
+        <div className="flex items-center justify-between gap-3 mb-6">
+          <h1 className="font-display font-bold uppercase text-2xl sm:text-3xl tracking-tight">{t('Checkout', 'إتمام الطلب')}</h1>
+          <button onClick={() => navigate('/cart')}
+            className="text-sm font-medium text-primary hover:underline">
+            {t('← Edit cart (your details are saved)', '← عدّل السلة (معلوماتك محفوظة)')}
+          </button>
+        </div>
         <div className="grid md:grid-cols-[1fr_340px] gap-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             {stockError && (
