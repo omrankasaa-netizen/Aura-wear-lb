@@ -1126,11 +1126,16 @@ async function tiktokTrackPurchase({ order_id, event_id } = {}) {
 // Uploads of supplier/customer invoice photos are parsed into order fields
 // (name, phone, address, amount) so staff can bulk-enter orders fast: the
 // modal prefills contact/address, and the admin adds the products manually.
-// Two engines, tried in order:
-//   1. Vision LLM (any OpenAI-compatible chat-completions endpoint). Configure
-//      with SCAN_INVOICE_API_KEY (+ optional SCAN_INVOICE_API_URL / MODEL).
-//      Handles Arabic, handwriting-ish prints, messy layouts.
-//   2. Local Tesseract OCR (eng+ara) + heuristics — zero-config fallback,
+// Engines, tried in order (each activates by setting its env var):
+//   1. Gemini (Google) — GEMINI_API_KEY (+ optional SCAN_INVOICE_GEMINI_MODEL,
+//      default gemini-2.0-flash). Vision LLM: OCR + structured JSON in one
+//      call; free tier available; handles Arabic and messy layouts.
+//   2. OpenAI-compatible vision LLM — SCAN_INVOICE_API_KEY (+ optional
+//      SCAN_INVOICE_API_URL / SCAN_INVOICE_MODEL). Same structured extraction.
+//   3. Google Cloud Vision OCR — GOOGLE_VISION_API_KEY. DOCUMENT_TEXT_DETECTION
+//      (excellent Arabic OCR) → heuristic field parse. Raw text only, so less
+//      accurate field mapping than the LLM engines.
+//   4. Local Tesseract OCR (eng+ara) + heuristics — zero-config fallback,
 //      decent on clean printed English invoices, weak on Arabic/handwriting.
 const INVOICE_SCAN_PROMPT = `You are reading a photo of a retail order invoice or delivery receipt (Lebanese boutique context; text may be English, Arabic, French, or mixed). Extract these fields and reply with STRICT JSON only, no markdown:
 {
@@ -1214,7 +1219,45 @@ async function scanInvoice({ image_base64, media_type }) {
   }
   const mediaType = /^image\/(jpeg|jpg|png|webp)$/.test(media_type || '') ? media_type : 'image/jpeg';
 
-  // Engine 1: vision LLM (OpenAI-compatible endpoint).
+  // Engine 1: Gemini (Google vision LLM) — structured extraction in one call.
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    const model = process.env.SCAN_INVOICE_GEMINI_MODEL || 'gemini-2.0-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: INVOICE_SCAN_PROMPT },
+              { inline_data: { mime_type: mediaType, data: image_base64 } },
+            ],
+          }],
+          generationConfig: { temperature: 0, maxOutputTokens: 800, responseMimeType: 'application/json' },
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        console.error('[scanInvoice] gemini error', res.status, data?.error?.message || '');
+        return { _status: 502, error: `Gemini error (${res.status}). Check GEMINI_API_KEY/model name.` };
+      }
+      const content = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      let parsed = null;
+      try { parsed = JSON.parse(content); } catch {
+        const m = content.match(/\{[\s\S]*\}/);
+        if (m) { try { parsed = JSON.parse(m[0]); } catch { /* fall through */ } }
+      }
+      if (!parsed) return { _status: 502, error: 'Gemini returned an unreadable result — try a clearer photo.' };
+      return { ok: true, engine: 'gemini', fields: sanitizeScanFields(parsed) };
+    } catch (e) {
+      console.error('[scanInvoice] gemini call failed:', e?.message);
+      return { _status: 502, error: 'Could not reach Gemini — try again.' };
+    }
+  }
+
+  // Engine 2: OpenAI-compatible vision LLM endpoint.
   const apiKey = process.env.SCAN_INVOICE_API_KEY;
   if (apiKey) {
     const apiUrl = process.env.SCAN_INVOICE_API_URL || 'https://api.openai.com/v1/chat/completions';
@@ -1256,12 +1299,40 @@ async function scanInvoice({ image_base64, media_type }) {
     }
   }
 
-  // Engine 2: local Tesseract OCR + heuristics (no key configured).
+  // Engine 3: Google Cloud Vision OCR (raw text) + heuristics.
+  const visionKey = process.env.GOOGLE_VISION_API_KEY;
+  if (visionKey) {
+    try {
+      const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${visionKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{
+            image: { content: image_base64 },
+            features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
+          }],
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        console.error('[scanInvoice] vision api error', res.status, data?.error?.message || '');
+        return { _status: 502, error: `Google Vision error (${res.status}). Check GOOGLE_VISION_API_KEY.` };
+      }
+      const text = data?.responses?.[0]?.fullTextAnnotation?.text || '';
+      if (!text.trim()) return { _status: 502, error: 'No text found in this photo — try a sharper, well-lit shot.' };
+      return { ok: true, engine: 'vision-ocr', fields: sanitizeScanFields(parseInvoiceText(text)) };
+    } catch (e) {
+      console.error('[scanInvoice] vision api call failed:', e?.message);
+      return { _status: 502, error: 'Could not reach Google Vision — try again.' };
+    }
+  }
+
+  // Engine 4: local Tesseract OCR + heuristics (no key configured).
   let Tesseract;
   try {
     Tesseract = (await import('tesseract.js')).default;
   } catch {
-    return { _status: 503, error: 'Invoice scanning is not configured on the server (set SCAN_INVOICE_API_KEY).' };
+    return { _status: 503, error: 'Invoice scanning is not configured on the server (set GEMINI_API_KEY, SCAN_INVOICE_API_KEY, or GOOGLE_VISION_API_KEY).' };
   }
   try {
     const buf = Buffer.from(image_base64, 'base64');

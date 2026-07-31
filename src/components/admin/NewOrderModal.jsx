@@ -79,8 +79,8 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
       if (f.amount) setScannedAmount({ amount: f.amount, currency: f.currency || 'USD' });
       if (f.notes) setField('notes', (form.notes ? form.notes + ' · ' : '') + f.notes);
       setScanMsg(
-        (payload.engine === 'ocr'
-          ? t('Scanned (basic OCR — double-check everything): ', 'تم المسح (OCR بسيط — تحقق من كل شيء): ')
+        (payload.engine === 'ocr' || payload.engine === 'vision-ocr'
+          ? t('Scanned (text OCR — double-check everything): ', 'تم المسح (OCR نصي — تحقق من كل شيء): ')
           : t('Scanned: ', 'تم المسح: '))
         + (filled.length ? filled.join(', ') : t('nothing readable — fill manually', 'لا شيء مقروء — عبّئ يدوياً'))
       );
