@@ -1171,8 +1171,8 @@ function parseInvoiceText(text) {
   const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return out;
 
-  const phoneMatch = text.match(/(?:\+?961[\s-]?)?0?(?:3\d|7[0-9]\d|8[01]\d)[\s-]?\d{3}[\s-]?\d{3}/) || text.match(/\+\d[\d\s-]{6,14}\d/);
-  if (phoneMatch) out.customer_phone = phoneMatch[0].replace(/[\s-]/g, '');
+  const phoneMatch = text.match(/(?:\+?961[\s\-/]?)?0?(?:3|7[0-9]|8[01])[\s\-/]?\d{3}[\s\-/]?\d{3}(?!\d)/) || text.match(/\+\d[\d\s-]{6,14}\d/);
+  if (phoneMatch) out.customer_phone = phoneMatch[0].replace(/[\s\-/]/g, '');
 
   const LB_CITY_RE = /(Tripoli|Beirut|Sidon|Saida|Tyre|Jounieh|Baalbek|Zahle|Nabatieh|Byblos|Jbail|Batroun|Akkar|Halba|Chtaura|Aley)/i;
   const cityLine = lines.find((l) => LB_CITY_RE.test(l));

@@ -47,22 +47,58 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
   const [scannedAmount, setScannedAmount] = useState(null); // { amount, currency }
   const invoiceInputRef = useRef(null);
 
+  // Resize the photo to max ~1600px on the long edge and re-encode as JPEG
+  // (~85%). Falls back to the raw file if canvas decoding fails (e.g. HEIC
+  // on a browser that can't decode it).
+  function downscaleForScan(file) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX = 1600;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        if (scale >= 1 && file.size < 2.5 * 1024 * 1024) {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => resolve('');
+          reader.readAsDataURL(file);
+          return;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(file);
+      };
+      img.src = url;
+    });
+  }
+
   async function handleInvoiceFile(file) {
     if (!file) return;
     setScanning(true);
     setScanMsg('');
     setScanErr('');
     try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error('read failed'));
-        reader.readAsDataURL(file);
-      });
+      // Downscale before upload: phone photos can be 8-12MB, which inflates
+      // ~33% as base64 and can exceed the request body limit — that was the
+      // "fails immediately" failure. 1600px is plenty for OCR.
+      const dataUrl = await downscaleForScan(file);
       const base64 = String(dataUrl).split(',')[1] || '';
       const res = await base44.functions.invoke('scanInvoice', {
         image_base64: base64,
-        media_type: file.type || 'image/jpeg',
+        media_type: 'image/jpeg',
       });
       const payload = res?.data || res;
       if (!payload?.ok) throw new Error(payload?.error || 'Scan failed');
