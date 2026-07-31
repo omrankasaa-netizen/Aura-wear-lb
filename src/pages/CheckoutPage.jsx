@@ -11,6 +11,8 @@ import { useQuery } from '@tanstack/react-query';
 import { trackInitiateCheckout, trackPurchase, newEventId } from '@/lib/meta';
 import { ttInitiateCheckout, ttTrackCompletePayment } from '@/lib/tiktok';
 import { reserveOrderStock, availableQty } from '@/lib/inventory';
+import CountryCodeSelect from '@/components/checkout/CountryCodeSelect';
+import { DEFAULT_COUNTRY, findCountry, validateNationalNumber, toE164, stripTrunkZero } from '@/lib/countryCodes';
 import { gaBeginCheckout, gaPurchase } from '@/lib/ga4';
 import { getAttributionContext } from '@/lib/utm';
 
@@ -91,6 +93,9 @@ export default function CheckoutPage() {
   });
 
   const [createAccount, setCreateAccount] = useState(false);
+  const [accountPassword, setAccountPassword] = useState('');
+  const [accountPasswordError, setAccountPasswordError] = useState('');
+  const [accountStatus, setAccountStatus] = useState(''); // '' | 'created' | 'existing'
   const [emailError, setEmailError] = useState('');
   const [addressChanged, setAddressChanged] = useState(false);
 
@@ -152,6 +157,9 @@ export default function CheckoutPage() {
   const [promoError, setPromoError] = useState('');
   const [promoLoading, setPromoLoading] = useState(false);
   const [phoneError, setPhoneError] = useState('');
+  const [phoneCountry, setPhoneCountry] = useState(DEFAULT_COUNTRY);
+  const [phoneHasWhatsApp, setPhoneHasWhatsApp] = useState(true);
+  const [altLebanesePhone, setAltLebanesePhone] = useState('');
   const [stockError, setStockError] = useState('');
 
   const isFreeShipping = promoCode?.type === 'free_shipping';
@@ -227,12 +235,17 @@ export default function CheckoutPage() {
     return regex.test(email);
   }
 
-  function validateLebanesePhone(phone) {
-    let c = String(phone || '').replace(/[\s\-()]/g, '');
-    c = c.replace(/^\+961/, '').replace(/^00961/, '').replace(/^961/, '').replace(/^0/, '');
-    const mobile = /^(3\d{6}|7[0-9]\d{6}|8[01]\d{6})$/;
-    const landline = /^[1-9]\d{6}$/;
-    return mobile.test(c) || landline.test(c);
+  // Per-country phone validation. form.customer_phone holds only the national
+  // digits (dial code lives in phoneCountry); validation uses the country's
+  // NSN length range from countryCodes.js.
+  const activeCountry = findCountry(phoneCountry) || findCountry(DEFAULT_COUNTRY);
+
+  function normalizePhone() {
+    return toE164(activeCountry, form.customer_phone);
+  }
+
+  function validateAltLebanese(phone) {
+    return /^\d{8}$/.test(stripTrunkZero(phone));
   }
 
   async function revalidateStock() {
@@ -287,10 +300,52 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!validateLebanesePhone(form.customer_phone)) {
-      setPhoneError(t('Please enter a valid Lebanese phone number (e.g. 03/70/71/76/78/79/81 or +961)', 'يرجى إدخال رقم هاتف لبناني صحيح'));
+    const phoneCheck = validateNationalNumber(activeCountry, form.customer_phone);
+    if (!phoneCheck.ok) {
+      const lenMsg = phoneCheck.min === phoneCheck.max ? `${phoneCheck.min}` : `${phoneCheck.min}–${phoneCheck.max}`;
+      setPhoneError(t(
+        `Please enter a valid ${activeCountry.name} number (${lenMsg} digits after +${activeCountry.dial})`,
+        `يرجى إدخال رقم صحيح (${lenMsg} أرقام بعد +${activeCountry.dial})`
+      ));
       setSubmitting(false);
       return;
+    }
+    const isLebanese = activeCountry.iso === 'LB';
+
+    // Foreign number: the courier operates inside Lebanon, so we need either
+    // WhatsApp on the given number or a local Lebanese fallback number.
+    if (!isLebanese && !phoneHasWhatsApp && !altLebanesePhone.trim()) {
+      setPhoneError(t(
+        'Please confirm this number has WhatsApp, or add a Lebanese number so the delivery courier can reach you.',
+        'يرجى تأكيد أن هذا الرقم يتوفر على واتساب، أو إضافة رقم لبناني ليتمكن موظف التوصيل من التواصل معك.'
+      ));
+      setSubmitting(false);
+      return;
+    }
+    if (altLebanesePhone.trim() && !validateAltLebanese(altLebanesePhone)) {
+      setPhoneError(t(
+        'The Lebanese courier number must be 8 digits (e.g. 70123456).',
+        'الرقم اللبناني لشركة التوصيل يجب أن يتكون من 8 أرقام (مثال: 70123456).'
+      ));
+      setSubmitting(false);
+      return;
+    }
+    const normalizedPhone = normalizePhone();
+    const normalizedAltLebanese = altLebanesePhone.trim() ? `+961${stripTrunkZero(altLebanesePhone)}` : '';
+
+    // Account opt-in requires a login email + password — otherwise the customer
+    // could never sign in afterwards and the "track my orders" promise broke.
+    if (!currentUser && createAccount) {
+      if (!form.customer_email || !form.customer_email.trim()) {
+        setEmailError(t('An email address is required to create your account', 'البريد الإلكتروني مطلوب لإنشاء حسابك'));
+        setSubmitting(false);
+        return;
+      }
+      if (!accountPassword || accountPassword.length < 8) {
+        setAccountPasswordError(t('Password must be at least 8 characters', 'كلمة المرور يجب أن تكون 8 أحرف على الأقل'));
+        setSubmitting(false);
+        return;
+      }
     }
 
     const stockIssues = await revalidateStock();
@@ -315,11 +370,31 @@ export default function CheckoutPage() {
           const res = await base44.functions.invoke('upsertCustomerForOrder', {
             email: form.customer_email,
             name: form.customer_name,
-            phone: form.customer_phone
+            phone: normalizedPhone
           });
           if (res?.data?.customer_id) guestCustomerId = res.data.customer_id;
         } catch (err) {
           console.error('Account creation failed:', err);
+        }
+
+        // Close the loop: register a REAL login account (email + password) so
+        // the customer can sign in later. The server emails an OTP — the first
+        // login verifies it, and order history matches past orders by email.
+        try {
+          await base44.auth.register({
+            email: form.customer_email.trim(),
+            password: accountPassword,
+            full_name: form.customer_name,
+            phone: normalizedPhone,
+          });
+          setAccountStatus('created');
+        } catch (err) {
+          const msg = String(err?.message || '').toLowerCase();
+          if (msg.includes('already') || msg.includes('exists') || msg.includes('registered') || msg.includes('duplicate')) {
+            setAccountStatus('existing');
+          } else {
+            console.error('User registration failed:', err);
+          }
         }
       }
 
@@ -327,7 +402,10 @@ export default function CheckoutPage() {
         ...getAttributionContext(),
         customer_id: guestCustomerId,
         customer_name: form.customer_name,
-        customer_phone: form.customer_phone,
+        customer_phone: normalizedPhone,
+        phone_country: activeCountry.iso,
+        phone_has_whatsapp: isLebanese ? true : phoneHasWhatsApp,
+        alt_lebanese_phone: normalizedAltLebanese,
         customer_email: form.customer_email,
         city: form.city,
         district: form.district,
@@ -498,6 +576,12 @@ export default function CheckoutPage() {
           <h2 className="font-display font-bold uppercase text-2xl tracking-tight">{t('Order placed', 'تم تقديم طلبك')}</h2>
           <p className="text-muted-foreground">{t('Your order number is', 'رقم طلبك هو')} <strong className="text-foreground text-lg font-display">{success}</strong></p>
           <p className="text-sm text-muted-foreground max-w-sm">{t('We’ll be in touch to confirm delivery. Track your order any time.', 'سنتواصل معك لتأكيد التوصيل. تتبّع طلبك في أي وقت.')}</p>
+          {accountStatus === 'created' && (
+            <p className="text-sm text-success max-w-sm">{t('Account created! Check your email for a verification code, then sign in to track this order.', 'تم إنشاء حسابك! تحقق من بريدك الإلكتروني لرمز التحقق، ثم سجّل الدخول لتتبع طلبك.')}</p>
+          )}
+          {accountStatus === 'existing' && (
+            <p className="text-sm text-muted-foreground max-w-sm">{t('You already have an account with this email — log in to track this order.', 'لديك حساب بهذا البريد الإلكتروني — سجّل الدخول لتتبع هذا الطلب.')}</p>
+          )}
           <div className="flex gap-3 mt-2">
             <button onClick={() => navigate('/track')} className="btn-outline h-11 px-5">{t('Track order', 'تتبع الطلب')}</button>
             <button onClick={() => navigate('/shop')} className="btn-primary h-11 px-5">{t('Continue shopping', 'تابع التسوق')}</button>
@@ -557,6 +641,25 @@ export default function CheckoutPage() {
               ].map(({ k, label, required, type, inputMode, autoComplete, readOnly }) => (
                 <div key={k}>
                   <label className="text-xs text-muted-foreground block mb-1">{label}</label>
+                  {k === 'customer_phone' ? (
+                    <div className="flex items-center rounded-sm border border-border bg-background h-11">
+                      <CountryCodeSelect value={phoneCountry} onChange={(iso) => { setPhoneCountry(iso); setPhoneError(''); }} />
+                      <input
+                        required={required}
+                        type="tel"
+                        inputMode="tel"
+                        autoComplete={autoComplete}
+                        dir="ltr"
+                        value={String(form[k] || '').replace(new RegExp(`^\\+?${activeCountry.dial}`), '')}
+                        onChange={e => {
+                          const raw = stripTrunkZero(e.target.value).slice(0, activeCountry.len[1]);
+                          setF(k, raw);
+                          setPhoneError('');
+                        }}
+                        className="w-full px-3 bg-transparent text-sm h-11 outline-none"
+                      />
+                    </div>
+                  ) : (
                   <input
                     required={required}
                     type={type || 'text'}
@@ -567,16 +670,80 @@ export default function CheckoutPage() {
                     onChange={e => { setF(k, e.target.value); if (k === 'customer_phone') setPhoneError(''); }}
                     className={`${inputCls} ${readOnly ? 'bg-secondary text-muted-foreground cursor-not-allowed' : ''}`}
                   />
+                  )}
                   {k === 'customer_email' && emailError && <p className="text-xs text-sale mt-1">{emailError}</p>}
                   {k === 'customer_phone' && phoneError && <p className="text-xs text-sale mt-1">{phoneError}</p>}
                 </div>
               ))}
 
+              {/* Foreign number → courier needs WhatsApp or a Lebanese fallback */}
+              {activeCountry.iso !== 'LB' && (
+                <div className="rounded-sm border border-primary/25 bg-primary/5 p-3 space-y-2.5">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={phoneHasWhatsApp}
+                      onChange={(e) => setPhoneHasWhatsApp(e.target.checked)}
+                      className="rounded-sm mt-0.5"
+                    />
+                    <span className="text-xs text-foreground">
+                      {t('This number has WhatsApp — my order can be confirmed there', 'هذا الرقم يتوفر على واتساب — يمكن تأكيد طلبي عليه')}
+                    </span>
+                  </label>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1">
+                      {t('Lebanese number for the delivery courier (optional)', 'رقم لبناني لشركة التوصيل (اختياري)')}
+                    </label>
+                    <div className="flex items-center rounded-sm border border-border bg-background h-11">
+                      <span className="px-3 text-sm text-muted-foreground border-r border-border" dir="ltr">+961</span>
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        dir="ltr"
+                        value={altLebanesePhone}
+                        onChange={(e) => { setAltLebanesePhone(stripTrunkZero(e.target.value).slice(0, 8)); setPhoneError(''); }}
+                        placeholder="7x xxx xxx"
+                        className="w-full px-3 bg-transparent text-sm h-11 outline-none"
+                      />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      {t('Our courier delivers inside Lebanon and may need a local number to reach you.', 'شركة التوصيل تعمل داخل لبنان وقد تحتاج رقماً محلياً للتواصل معك.')}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {!currentUser && (
-                <label className="flex items-center gap-2 cursor-pointer border-t border-border pt-3">
-                  <input type="checkbox" checked={createAccount} onChange={(e) => setCreateAccount(e.target.checked)} className="rounded-sm" />
-                  <span className="text-xs text-muted-foreground">{t('Create an account to track my orders', 'إنشاء حساب لتتبع طلباتي')}</span>
-                </label>
+                <div className="border-t border-border pt-3 space-y-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={createAccount} onChange={(e) => setCreateAccount(e.target.checked)} className="rounded-sm" />
+                    <span className="text-xs text-muted-foreground">{t('Create an account to track my orders', 'إنشاء حساب لتتبع طلباتي')}</span>
+                  </label>
+                  {createAccount && (
+                    <div className="space-y-2">
+                      {!form.customer_email?.trim() && (
+                        <p className="text-[11px] text-amber-700">
+                          {t('Add your email address above — it becomes your login.', 'أضف بريدك الإلكتروني أعلاه — سيصبح اسم تسجيل الدخول.')}
+                        </p>
+                      )}
+                      <div>
+                        <label className="text-xs text-muted-foreground block mb-1">{t('Choose a password *', 'اختر كلمة مرور *')}</label>
+                        <input
+                          type="password"
+                          autoComplete="new-password"
+                          value={accountPassword}
+                          onChange={(e) => { setAccountPassword(e.target.value); setAccountPasswordError(''); }}
+                          placeholder={t('At least 8 characters', '8 أحرف على الأقل')}
+                          className={inputCls}
+                        />
+                        {accountPasswordError && <p className="text-xs text-sale mt-1">{accountPasswordError}</p>}
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          {t("We'll email you a verification code to activate your account after checkout.", 'سنرسل لك رمز تحقق بالبريد الإلكتروني لتفعيل حسابك بعد إتمام الطلب.')}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 

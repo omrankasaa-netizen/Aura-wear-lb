@@ -260,11 +260,11 @@ export default function ShopPage() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center gap-3 mb-5">
-          <div className="flex items-center gap-2 border border-border rounded-sm px-3 h-11 flex-1 max-w-sm">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-5">
+          <div className="flex items-center gap-2 border border-border rounded-sm px-3 h-11 flex-1 max-w-sm min-w-0">
             <Search className="w-4 h-4 text-muted-foreground shrink-0" />
             <input value={search} onChange={e => set({ q: e.target.value })} placeholder={t('Search…', 'بحث…')}
-              className="bg-transparent text-sm flex-1 outline-none" />
+              className="bg-transparent text-sm flex-1 min-w-0 outline-none" />
             {search && <button onClick={() => set({ q: '' })}><X className="w-3.5 h-3.5 text-muted-foreground" /></button>}
           </div>
           <button onClick={() => setMobileFilterOpen(true)}
@@ -275,7 +275,7 @@ export default function ShopPage() {
           <div className="ml-auto flex items-center gap-3">
             <span className="text-sm text-muted-foreground hidden sm:block tabular-nums">{filtered.length} {t('items', 'منتج')}</span>
             <select value={filterSort} onChange={e => set({ sort: e.target.value })}
-              className="border border-border rounded-sm px-3 h-11 text-sm outline-none cursor-pointer bg-background">
+              className="border border-border rounded-sm px-3 h-11 text-sm outline-none cursor-pointer bg-background max-w-[9rem] sm:max-w-none">
               <option value="new">{t('Newest', 'الأحدث')}</option>
               <option value="price_asc">{t('Price ↑', 'السعر ↑')}</option>
               <option value="price_desc">{t('Price ↓', 'السعر ↓')}</option>

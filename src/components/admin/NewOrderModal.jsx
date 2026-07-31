@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { X, Plus, Trash2, Camera, Loader2 } from 'lucide-react';
 import { logAction } from '@/lib/auditLog';
 import { useLang } from '@/contexts/LanguageContext';
 import { useDiscounts } from '@/contexts/DiscountContext';
@@ -37,6 +37,60 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
   const [error, setError] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [showPicker, setShowPicker] = useState(false);
+
+  // ── Invoice photo scan → prefill (name/phone/address/amount) ────────────
+  // Products are still added by hand; the scan only fills the contact fields
+  // and keeps the invoice total as a cross-check against the computed total.
+  const [scanning, setScanning] = useState(false);
+  const [scanMsg, setScanMsg] = useState('');
+  const [scanErr, setScanErr] = useState('');
+  const [scannedAmount, setScannedAmount] = useState(null); // { amount, currency }
+  const invoiceInputRef = useRef(null);
+
+  async function handleInvoiceFile(file) {
+    if (!file) return;
+    setScanning(true);
+    setScanMsg('');
+    setScanErr('');
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('read failed'));
+        reader.readAsDataURL(file);
+      });
+      const base64 = String(dataUrl).split(',')[1] || '';
+      const res = await base44.functions.invoke('scanInvoice', {
+        image_base64: base64,
+        media_type: file.type || 'image/jpeg',
+      });
+      const payload = res?.data || res;
+      if (!payload?.ok) throw new Error(payload?.error || 'Scan failed');
+      const f = payload.fields || {};
+      const filled = [];
+      if (f.customer_name) { setField('customer_name', f.customer_name); filled.push('name'); }
+      if (f.customer_phone) { setField('customer_phone', f.customer_phone); filled.push('phone'); }
+      if (f.city) {
+        const match = LB_CITIES.find(c => c.toLowerCase() === String(f.city).toLowerCase())
+          || (/(saidon|saida)/i.test(f.city) ? 'Sidon' : null);
+        if (match) setField('city', match);
+      }
+      if (f.address) { setField('street', f.address); filled.push('address'); }
+      if (f.amount) setScannedAmount({ amount: f.amount, currency: f.currency || 'USD' });
+      if (f.notes) setField('notes', (form.notes ? form.notes + ' · ' : '') + f.notes);
+      setScanMsg(
+        (payload.engine === 'ocr'
+          ? t('Scanned (basic OCR — double-check everything): ', 'تم المسح (OCR بسيط — تحقق من كل شيء): ')
+          : t('Scanned: ', 'تم المسح: '))
+        + (filled.length ? filled.join(', ') : t('nothing readable — fill manually', 'لا شيء مقروء — عبّئ يدوياً'))
+      );
+    } catch (e) {
+      setScanErr(e?.data?.error || e?.data?.data?.error || e.message || 'Scan failed');
+    } finally {
+      setScanning(false);
+      if (invoiceInputRef.current) invoiceInputRef.current.value = '';
+    }
+  }
 
   const { data: products = [] } = useQuery({
     queryKey: ['order-products'],
@@ -199,10 +253,45 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="font-heading font-semibold text-foreground">{t('New Order', 'طلب جديد')}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-4 h-4" /></button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={invoiceInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => handleInvoiceFile(e.target.files?.[0])}
+            />
+            <button
+              onClick={() => invoiceInputRef.current?.click()}
+              disabled={scanning}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 text-primary text-xs font-medium hover:bg-primary/15 disabled:opacity-50"
+              title={t('Upload an invoice photo — name, phone, address and amount are filled in automatically', 'ارفع صورة الفاتورة — الاسم والهاتف والعنوان والمبلغ تُعبأ تلقائياً')}
+            >
+              {scanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+              {scanning ? t('Scanning…', 'جارٍ المسح…') : t('Scan Invoice', 'مسح فاتورة')}
+            </button>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-4 h-4" /></button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {(scanMsg || scanErr || scannedAmount) && (
+            <div className="space-y-1.5">
+              {scanMsg && <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2">{scanMsg}</p>}
+              {scanErr && <p className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2">{scanErr}</p>}
+              {scannedAmount && (
+                <p className={`text-xs rounded-xl px-3 py-2 border ${
+                  Math.abs((totals?.grandTotal || 0) - scannedAmount.amount) < 0.01
+                    ? 'text-green-700 bg-green-50 border-green-200'
+                    : 'text-amber-800 bg-amber-50 border-amber-200'
+                }`}>
+                  {t('Invoice total detected:', 'المبلغ على الفاتورة:')} {scannedAmount.currency === 'LBP' ? `${scannedAmount.amount.toLocaleString()} LBP` : `$${scannedAmount.amount.toFixed(2)}`}
+                  {scannedAmount.currency === 'USD' && Math.abs((totals?.grandTotal || 0) - scannedAmount.amount) >= 0.01 &&
+                    ` — ${t('order total so far is', 'مجموع الطلب حالياً')} $${(totals?.grandTotal || 0).toFixed(2)}`}
+                </p>
+              )}
+            </div>
+          )}
           {/* Channel + Payment */}
           <div className="grid grid-cols-2 gap-3">
             <div>

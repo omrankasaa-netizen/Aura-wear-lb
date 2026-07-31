@@ -1,4 +1,4 @@
-import { db, createRecord, getRecord, updateRecord, queryRecords, bulkCreate, nowIso } from './db.js';
+import { db, createRecord, getRecord, updateRecord, deleteRecord, queryRecords, bulkCreate, nowIso } from './db.js';
 import { sendEmail } from './email.js';
 import { ADMIN_TOOLS, ADMIN_TOOL_GUARDS } from './adminTools.js';
 import { sendPurchaseCapi, isCapiConfigured } from './meta.js';
@@ -324,6 +324,171 @@ function releaseStock({ order_id }, user) {
   return runRelease();
 }
 
+// ─── Edit order items (admin) ────────────────────────────────────────────────
+// Replaces an order's line items after placement (size/variant swaps, quantity
+// changes, removals, additions) and moves inventory atomically to match.
+// Mode depends on how far the order's stock has progressed:
+//   • stock_reserved (New, held)      → drop old holds, hold the new lines.
+//   • stock_committed (Confirmed+)    → return old units, sell the new lines.
+//   • neither (legacy in-flight)      → validate only; confirm commits later.
+// Everything runs inside ONE db.transaction: the release of current lines and
+// the availability check + application of the new lines see one consistent
+// snapshot, and ANY shortage throws — rolling back the release too, so an edit
+// either fully applies or leaves the order completely untouched (never half).
+// Discount and delivery fee are preserved as originally set.
+const ORDER_EDIT_LOCKED_STATUSES = ['Out for Delivery', 'Delivered', 'Cancelled'];
+
+function editOrderItems({ order_id, items: newItems, note }, user) {
+  const o = queryRecords('Order', { query: { id: order_id }, limit: 1 })[0];
+  if (!o) return { _status: 404, error: 'Order not found' };
+  if (ORDER_EDIT_LOCKED_STATUSES.includes(o.order_status)) {
+    return { _status: 409, ok: false, error: `Orders that are ${o.order_status} can no longer be edited` };
+  }
+  if (!Array.isArray(newItems) || newItems.length === 0) {
+    return { _status: 400, error: 'items must be a non-empty array (use Cancel Order to remove everything)' };
+  }
+  for (const it of newItems) {
+    if (!it.product_id) return { _status: 400, error: 'Every item needs a product_id' };
+    const q = Number(it.quantity);
+    if (!Number.isInteger(q) || q < 1 || q > 99) {
+      return { _status: 400, error: 'Every item needs an integer quantity between 1 and 99' };
+    }
+  }
+
+  const orderLabel = o.order_number || order_id;
+  const reason = `Order ${orderLabel} edited`;
+  const by = user?.email || 'system';
+  const mode = o.stock_committed ? 'commit' : o.stock_reserved ? 'reserve' : 'none';
+  const currentItems = queryRecords('OrderItem', { query: { order_id } });
+
+  const runEdit = db.transaction(() => {
+    const movements = [];
+
+    // Pass 1 — release every current line (undo its stock effect).
+    for (const item of currentItems) {
+      const { product, variant } = resolveLineTarget(item);
+      if (!product) continue;
+      const isVariant = product.has_variants && (item.size || item.color);
+      if (isVariant && !variant) continue;
+      const target = isVariant ? variant : product;
+      if (mode === 'commit') {
+        const prev = isVariant ? (target.qty_on_hand || 0) : (target.stock_quantity || 0);
+        const next = prev + item.quantity;
+        updateRecord(isVariant ? 'ProductVariant' : 'Product', target.id, isVariant ? { qty_on_hand: next } : { stock_quantity: next });
+        movements.push({ product_id: item.product_id, variant_sku: isVariant ? target.variant_sku : undefined, type: 'Returned', quantity: item.quantity, previous_stock: prev, new_stock: next, reason, created_at: nowIso(), created_by: by });
+      } else if (mode === 'reserve') {
+        const prevRes = target.qty_reserved || 0;
+        const nextRes = clampNonNeg(prevRes - item.quantity);
+        updateRecord(isVariant ? 'ProductVariant' : 'Product', target.id, { qty_reserved: nextRes });
+        movements.push({ product_id: item.product_id, variant_sku: isVariant ? target.variant_sku : undefined, type: 'Released', quantity: item.quantity, previous_stock: (isVariant ? (target.qty_on_hand || 0) : (target.stock_quantity || 0)) - prevRes, new_stock: (isVariant ? (target.qty_on_hand || 0) : (target.stock_quantity || 0)) - nextRes, reason, created_at: nowIso(), created_by: by });
+      }
+    }
+
+    // Pass 2 — validate every NEW line against post-release availability.
+    const plan = [];
+    const shortages = [];
+    for (const it of newItems) {
+      const qty = Number(it.quantity);
+      const { product, variant } = resolveLineTarget({ product_id: it.product_id, size: it.size || '', color: it.color || '' });
+      if (!product) {
+        shortages.push({ name: it.product_name || it.product_id, available: 0, needed: qty, reason: 'Product not found' });
+        continue;
+      }
+      if (product.has_variants && (it.size || it.color)) {
+        if (!variant) {
+          shortages.push({ name: product.name, available: 0, needed: qty, reason: `Variant not found (${[it.size, it.color].filter(Boolean).join(', ')})` });
+          continue;
+        }
+        const available = (variant.qty_on_hand || 0) - (variant.qty_reserved || 0);
+        if (available < qty) {
+          shortages.push({ name: `${product.name} (${[it.size, it.color].filter(Boolean).join(', ')})`, available, needed: qty });
+        } else {
+          plan.push({ isVariant: true, target: variant, product, qty, available });
+        }
+      } else {
+        const available = (product.stock_quantity || 0) - (product.qty_reserved || 0);
+        if (available < qty) {
+          shortages.push({ name: product.name, available, needed: qty });
+        } else {
+          plan.push({ isVariant: false, target: product, product, qty, available });
+        }
+      }
+    }
+    if (shortages.length) {
+      const err = new Error('Insufficient stock for edited order');
+      err._shortages = shortages;
+      throw err; // rolls back — original order + stock fully intact
+    }
+
+    // Pass 3 — apply the new lines' stock effect (mirror-image of pass 1).
+    for (const p of plan) {
+      if (mode === 'commit') {
+        const prev = p.isVariant ? (p.target.qty_on_hand || 0) : (p.target.stock_quantity || 0);
+        const next = prev - p.qty; // availability was validated, so prev >= qty
+        updateRecord(p.isVariant ? 'ProductVariant' : 'Product', p.target.id, p.isVariant ? { qty_on_hand: next } : { stock_quantity: next });
+        movements.push({ product_id: p.product.id, variant_sku: p.isVariant ? p.target.variant_sku : undefined, type: 'Sold', quantity: -p.qty, previous_stock: prev, new_stock: next, reason, created_at: nowIso(), created_by: by });
+      } else if (mode === 'reserve') {
+        const prevRes = p.target.qty_reserved || 0;
+        updateRecord(p.isVariant ? 'ProductVariant' : 'Product', p.target.id, { qty_reserved: prevRes + p.qty });
+        movements.push({ product_id: p.product.id, variant_sku: p.isVariant ? p.target.variant_sku : undefined, type: 'Reserved', quantity: -p.qty, previous_stock: p.available, new_stock: p.available - p.qty, reason, created_at: nowIso(), created_by: by });
+      }
+    }
+    if (movements.length) bulkCreate('InventoryMovement', movements);
+
+    // Replace the OrderItem docs (snapshot fields, same shape as checkout).
+    for (const old of currentItems) deleteRecord('OrderItem', old.id);
+    const itemDocs = newItems.map((it) => {
+      const p = plan.find((x) => x.product.id === it.product_id
+        && (x.isVariant ? ((x.target.size || '') === (it.size || '') && (x.target.color || '') === (it.color || '')) : (!(it.size || it.color))));
+      const unit = Number.isFinite(Number(it.unit_price_usd)) && Number(it.unit_price_usd) >= 0
+        ? Number(it.unit_price_usd)
+        : Number(p?.product.price_usd || 0);
+      const qty = Number(it.quantity);
+      return {
+        order_id,
+        product_id: it.product_id,
+        product_name: p?.product.name || it.product_name || '',
+        sku: p?.product.sku || it.sku || '',
+        size: it.size || '',
+        color: it.color || '',
+        quantity: qty,
+        unit_price_usd: unit,
+        line_total_usd: unit * qty,
+      };
+    });
+    bulkCreate('OrderItem', itemDocs);
+
+    // Recalculate totals. Discount and delivery fee stay as originally agreed.
+    const subtotal = itemDocs.reduce((sum, d) => sum + d.line_total_usd, 0);
+    const discount = Number(o.discount_usd || 0);
+    const delivery = Number(o.delivery_fee_usd || 0);
+    const grand = Math.max(0, subtotal - discount) + delivery;
+    updateRecord('Order', order_id, { subtotal_usd: subtotal, grand_total_usd: grand });
+
+    return { movements: movements.length, items: itemDocs.length, subtotal_usd: subtotal, grand_total_usd: grand };
+  });
+
+  try {
+    const result = runEdit();
+    try {
+      createRecord('AuditLog', {
+        action: 'order_items_edited',
+        entity: 'Order',
+        entity_id: order_id,
+        user_name: by,
+        details: `${orderLabel}: ${currentItems.length} → ${result.items} line(s), total $${Number(o.grand_total_usd || 0).toFixed(2)} → $${result.grand_total_usd.toFixed(2)}${note ? ` · ${String(note).slice(0, 200)}` : ''}`,
+        created_at: nowIso(),
+      });
+    } catch (auditErr) {
+      console.error('[audit] order edit log failed:', auditErr?.message);
+    }
+    return { ok: true, ...result };
+  } catch (e) {
+    if (e && e._shortages) return { _status: 409, ok: false, shortages: e._shortages };
+    throw e;
+  }
+}
+
 function manualAdjust({ product_id, variant_sku, new_qty, movement_type, reason }, user) {
   if (!['Received', 'Correction', 'Damaged'].includes(movement_type)) {
     return { _status: 400, error: 'Invalid movement_type. Use Received, Correction, or Damaged.' };
@@ -356,14 +521,24 @@ function manualAdjust({ product_id, variant_sku, new_qty, movement_type, reason 
   return { ok: true, previous_stock: prev, new_stock: new_qty, delta };
 }
 
+// The engine itself is registered as 'public' (guest checkout must reserve at
+// placement without a login), so per-action authorization is enforced here:
+//   check_stock / reserve_stock : public (read + placement-time hold)
+//   commit_stock / release_stock / manual_adjust / edit_order_items : admin only
 function inventoryEngine(body, user) {
-  if (!user) return { _status: 401, error: 'Unauthorized' };
   const { action } = body;
   if (action === 'check_stock') return checkStock(body);
   if (action === 'reserve_stock') return reserveStock(body, user);
-  if (action === 'commit_stock') return commitStock(body, user);
-  if (action === 'release_stock') return releaseStock(body, user);
-  if (action === 'manual_adjust') return manualAdjust(body, user);
+  if (action === 'commit_stock' || action === 'release_stock' || action === 'manual_adjust' || action === 'edit_order_items') {
+    const isAdmin = user && (user.role === 'admin' || user.role === 'super_admin');
+    if (!isAdmin) {
+      return { _status: user ? 403 : 401, error: user ? 'Forbidden: admin access required' : 'Authentication required' };
+    }
+    if (action === 'commit_stock') return commitStock(body, user);
+    if (action === 'release_stock') return releaseStock(body, user);
+    if (action === 'edit_order_items') return editOrderItems(body, user);
+    return manualAdjust(body, user);
+  }
   return { _status: 400, error: 'Unknown action' };
 }
 
@@ -947,6 +1122,163 @@ async function tiktokTrackPurchase({ order_id, event_id } = {}) {
   return { ok: !!result.sent, ...result };
 }
 
+// ─── Invoice photo → order prefill (staff/admin) ─────────────────────────────
+// Uploads of supplier/customer invoice photos are parsed into order fields
+// (name, phone, address, amount) so staff can bulk-enter orders fast: the
+// modal prefills contact/address, and the admin adds the products manually.
+// Two engines, tried in order:
+//   1. Vision LLM (any OpenAI-compatible chat-completions endpoint). Configure
+//      with SCAN_INVOICE_API_KEY (+ optional SCAN_INVOICE_API_URL / MODEL).
+//      Handles Arabic, handwriting-ish prints, messy layouts.
+//   2. Local Tesseract OCR (eng+ara) + heuristics — zero-config fallback,
+//      decent on clean printed English invoices, weak on Arabic/handwriting.
+const INVOICE_SCAN_PROMPT = `You are reading a photo of a retail order invoice or delivery receipt (Lebanese boutique context; text may be English, Arabic, French, or mixed). Extract these fields and reply with STRICT JSON only, no markdown:
+{
+  "customer_name": string|null,   // buyer/recipient full name
+  "customer_phone": string|null,  // phone in international format (+961... if Lebanese); digits and + only
+  "city": string|null,            // Lebanese city/area name in English if identifiable
+  "address": string|null,         // street/building/district detail, one line, English if possible
+  "amount": number|null,          // grand total the customer owes (number only)
+  "currency": string|null,        // "USD" | "LBP" | other ISO code
+  "notes": string|null            // anything notable (item counts, payment method, references)
+}
+If a field is not readable, use null. Never guess a phone digit.`;
+
+function sanitizeScanFields(raw) {
+  const f = raw && typeof raw === 'object' ? raw : {};
+  const cleanStr = (v, max = 200) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+  const phone = cleanStr(f.customer_phone, 32);
+  const amount = Number.isFinite(Number(f.amount)) && Number(f.amount) > 0 ? Number(f.amount) : null;
+  return {
+    customer_name: cleanStr(f.customer_name, 120),
+    customer_phone: phone ? phone.replace(/[^\d+]/g, '') : null,
+    city: cleanStr(f.city, 60),
+    address: cleanStr(f.address, 200),
+    amount,
+    currency: cleanStr(f.currency, 8),
+    notes: cleanStr(f.notes, 300),
+  };
+}
+
+// Heuristic field extraction for the Tesseract fallback path.
+function parseInvoiceText(text) {
+  const out = { customer_name: null, customer_phone: null, city: null, address: null, amount: null, currency: null, notes: null };
+  const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return out;
+
+  const phoneMatch = text.match(/(?:\+?961[\s-]?)?0?(?:3\d|7[0-9]\d|8[01]\d)[\s-]?\d{3}[\s-]?\d{3}/) || text.match(/\+\d[\d\s-]{6,14}\d/);
+  if (phoneMatch) out.customer_phone = phoneMatch[0].replace(/[\s-]/g, '');
+
+  const LB_CITY_RE = /(Tripoli|Beirut|Sidon|Saida|Tyre|Jounieh|Baalbek|Zahle|Nabatieh|Byblos|Jbail|Batroun|Akkar|Halba|Chtaura|Aley)/i;
+  const cityLine = lines.find((l) => LB_CITY_RE.test(l));
+  if (cityLine) {
+    out.city = cityLine.match(LB_CITY_RE)[1];
+    if (cityLine.length < 120) out.address = cityLine;
+  }
+
+  const totalLine = [...lines].reverse().find((l) => /total|amount|due|المجموع|الإجمالي|الاجمالي|المبلغ/i.test(l));
+  const moneyRe = /\$\s?([\d]+(?:[.,]\d{1,2})?)/g;
+  const pickAmount = (src) => {
+    let best = null;
+    for (const m of src.matchAll(moneyRe)) {
+      const v = parseFloat(m[1].replace(',', ''));
+      if (Number.isFinite(v) && v > 0 && (best === null || v > best)) best = v;
+    }
+    if (best !== null) return { amount: best, currency: 'USD' };
+    const lbp = src.match(/([\d][\d.,]*)\s?(?:L\.?L\.?|LBP|ل\.?ل)/i);
+    if (lbp) {
+      const v = parseFloat(lbp[1].replace(/[.,](?=\d{3}\b)/g, '').replace(',', '.'));
+      if (Number.isFinite(v) && v > 0) return { amount: v, currency: 'LBP' };
+    }
+    return null;
+  };
+  const found = (totalLine && pickAmount(totalLine)) || pickAmount(text);
+  if (found) { out.amount = found.amount; out.currency = found.currency; }
+
+  const skipRe = /invoice|receipt|فاتورة|order|tel|phone|date|address|total|amount|\d{4,}/i;
+  const nameLine = lines.find((l) => /[A-Za-z]{2,}/.test(l) && !/\d/.test(l) && !skipRe.test(l) && l.split(/\s+/).length >= 2 && l.length <= 60);
+  if (nameLine) {
+    // Strip a "Customer:" / "Name:" label prefix when the OCR kept it.
+    out.customer_name = nameLine.replace(/^(customer|client|name|buyer|recipient|الاسم)\s*[:\-]\s*/i, '').trim() || nameLine;
+  }
+
+  return out;
+}
+
+async function scanInvoice({ image_base64, media_type }) {
+  if (!image_base64 || typeof image_base64 !== 'string' || image_base64.length < 100) {
+    return { _status: 400, error: 'image_base64 is required' };
+  }
+  if (image_base64.length > 14_000_000) {
+    return { _status: 413, error: 'Image too large — please use a photo under ~10MB' };
+  }
+  const mediaType = /^image\/(jpeg|jpg|png|webp)$/.test(media_type || '') ? media_type : 'image/jpeg';
+
+  // Engine 1: vision LLM (OpenAI-compatible endpoint).
+  const apiKey = process.env.SCAN_INVOICE_API_KEY;
+  if (apiKey) {
+    const apiUrl = process.env.SCAN_INVOICE_API_URL || 'https://api.openai.com/v1/chat/completions';
+    const model = process.env.SCAN_INVOICE_MODEL || 'gpt-4o-mini';
+    try {
+      const res = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model,
+          temperature: 0,
+          max_tokens: 600,
+          response_format: { type: 'json_object' },
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: INVOICE_SCAN_PROMPT },
+              { type: 'image_url', image_url: { url: `data:${mediaType};base64,${image_base64}` } },
+            ],
+          }],
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        console.error('[scanInvoice] vision API error', res.status, data?.error?.message || '');
+        return { _status: 502, error: `Vision service error (${res.status}). Check SCAN_INVOICE_API_KEY/model.` };
+      }
+      const content = data?.choices?.[0]?.message?.content || '';
+      let parsed = null;
+      try { parsed = JSON.parse(content); } catch {
+        const m = content.match(/\{[\s\S]*\}/);
+        if (m) { try { parsed = JSON.parse(m[0]); } catch { /* fall through */ } }
+      }
+      if (!parsed) return { _status: 502, error: 'Vision service returned an unreadable result — try a clearer photo.' };
+      return { ok: true, engine: 'vision', fields: sanitizeScanFields(parsed) };
+    } catch (e) {
+      console.error('[scanInvoice] vision call failed:', e?.message);
+      return { _status: 502, error: 'Could not reach the vision service — try again.' };
+    }
+  }
+
+  // Engine 2: local Tesseract OCR + heuristics (no key configured).
+  let Tesseract;
+  try {
+    Tesseract = (await import('tesseract.js')).default;
+  } catch {
+    return { _status: 503, error: 'Invoice scanning is not configured on the server (set SCAN_INVOICE_API_KEY).' };
+  }
+  try {
+    const buf = Buffer.from(image_base64, 'base64');
+    let result;
+    try {
+      result = await Tesseract.recognize(buf, 'eng+ara');
+    } catch {
+      result = await Tesseract.recognize(buf, 'eng');
+    }
+    const text = result?.data?.text || '';
+    return { ok: true, engine: 'ocr', fields: sanitizeScanFields(parseInvoiceText(text)) };
+  } catch (e) {
+    console.error('[scanInvoice] OCR failed:', e?.message);
+    return { _status: 502, error: 'Could not read this photo — try a sharper, well-lit shot.' };
+  }
+}
+
 const REGISTRY = {
   inventoryEngine,
   membershipEngine,
@@ -961,6 +1293,7 @@ const REGISTRY = {
   onOrderDelivered,
   listUsers,
   setUserRole,
+  scanInvoice,
   ...ADMIN_TOOLS,
 };
 
@@ -983,6 +1316,7 @@ const FUNCTION_GUARDS = {
   seedShippingZones: 'admin',
   listUsers: 'super_admin',
   setUserRole: 'super_admin',
+  scanInvoice: 'staff',
   ...ADMIN_TOOL_GUARDS,
 };
 

@@ -161,9 +161,14 @@ export default function ProductPage() {
     ? variantSelectionComplete && !!selectedVariant && stockQty > 0
     : (!needsSize || !!selectedSize) && (!needsColor || !!selectedColor) && stockQty > 0;
 
+  // When EVERY variant is gone the CTA should say "out of stock" immediately,
+  // even before the shopper picks options (MiniYo mobile-hardening parity).
+  const totalVariantStock = product.has_variants ? variants.reduce((sum, v) => sum + availableQty(v), 0) : stockQty;
+  const allVariantsOos = product.has_variants && variants.length > 0 && totalVariantStock <= 0;
+
   // The single clearest reason the shopper can't add yet (for the button label).
   const addBlockReason =
-    stockQty === 0 && (!product.has_variants || selectedVariant) ? 'stock'
+    (allVariantsOos || (stockQty === 0 && (!product.has_variants || selectedVariant))) ? 'stock'
     : needsColor && !selectedColor ? 'color'
     : needsSize && !selectedSize ? 'size'
     : null;
