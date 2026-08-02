@@ -37,6 +37,8 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
   const [error, setError] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [showPicker, setShowPicker] = useState(false);
+  const [expandedProductId, setExpandedProductId] = useState(null);
+  const [addedKey, setAddedKey] = useState(null);
 
 
   const { data: products = [] } = useQuery({
@@ -69,21 +71,27 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
     setForm(f => ({ ...f, delivery_zone: zone, delivery_fee_usd: DELIVERY_FEES[zone] ?? 3 }));
   }
 
-  function addProductToOrder(product) {
+  function addProductToOrder(product, variant = null) {
     const pvs = variantsByProduct[product.id] || [];
     // Default to the storefront's effective (discounted) price so manual orders
     // don't over-charge / over-report revenue. Admin can still override below.
     const original = Number(product.price_usd) || 0;
     const effective = Number(getDiscountedPrice ? getDiscountedPrice(product) : original) || original;
     const discount = getProductDiscount ? getProductDiscount(product) : null;
+
+    const size = variant ? (variant.size || '') : (pvs.length > 0 ? pvs[0].size || '' : '');
+    const color = variant ? (variant.color || '') : (pvs.length > 0 ? pvs[0].color || '' : '');
+    const unitPrice = variant?.price_usd ? Number(variant.price_usd) : effective;
+    const sku = variant?.sku || product.sku || '';
+
     const newItem = {
       _id: Date.now() + Math.random(),
       product_id: product.id,
       product_name: product.name,
-      sku: product.sku || '',
-      size: pvs.length > 0 ? pvs[0].size || '' : '',
-      color: pvs.length > 0 ? pvs[0].color || '' : '',
-      unit_price_usd: effective,
+      sku,
+      size,
+      color,
+      unit_price_usd: unitPrice,
       original_price_usd: original,
       auto_discounted: !!discount && effective < original,
       quantity: 1,
@@ -92,8 +100,19 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
       hasVariants: pvs.length > 0,
     };
     setItems(prev => [...prev, newItem]);
-    setShowPicker(false);
-    setProductSearch('');
+
+    const key = `${product.id}|${size}|${color}`;
+    setAddedKey(key);
+    setTimeout(() => setAddedKey(null), 1500);
+  }
+
+  function handlePickerProductClick(product) {
+    const pvs = variantsByProduct[product.id] || [];
+    if (pvs.length > 0) {
+      setExpandedProductId(prev => prev === product.id ? null : product.id);
+    } else {
+      addProductToOrder(product, null);
+    }
   }
 
   function updateItem(id, field, value) {
@@ -307,17 +326,57 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
 
             {showPicker && (
               <div className="mb-3 bg-muted/50 border border-border rounded-xl p-3 space-y-2">
-                <input value={productSearch} onChange={e => setProductSearch(e.target.value)}
-                  placeholder={t('Search product…', 'ابحث عن منتج…')}
-                  className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm" />
-                <div className="max-h-40 overflow-y-auto space-y-0.5">
-                  {filteredProducts.map(p => (
-                    <button key={p.id} onClick={() => addProductToOrder(p)}
-                      className="w-full text-left px-3 py-2 rounded-xl hover:bg-card text-sm transition-colors">
-                      <span className="font-medium text-foreground">{p.name}</span>
-                      <span className="text-muted-foreground ms-2">${p.price_usd?.toFixed(2)}</span>
-                    </button>
-                  ))}
+                <div className="flex items-center gap-2">
+                  <input value={productSearch} onChange={e => setProductSearch(e.target.value)}
+                    placeholder={t('Search product…', 'ابحث عن منتج…')}
+                    className="flex-1 px-3 py-2 rounded-xl border border-input bg-background text-sm" />
+                  <button
+                    onClick={() => { setShowPicker(false); setProductSearch(''); setExpandedProductId(null); }}
+                    className="px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold shrink-0 hover:bg-primary/90">
+                    ✓ {t('Done', 'تم')}
+                  </button>
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-0.5">
+                  {filteredProducts.map(p => {
+                    const pvs = variantsByProduct[p.id] || [];
+                    const isExpanded = expandedProductId === p.id;
+                    const noVariantKey = `${p.id}||`;
+                    return (
+                      <div key={p.id}>
+                        <button onClick={() => handlePickerProductClick(p)}
+                          className="w-full text-left px-3 py-2 rounded-xl hover:bg-card text-sm transition-colors flex items-center justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <span className="font-medium text-foreground">{p.name}</span>
+                            <span className="text-muted-foreground ms-2">${p.price_usd?.toFixed(2)}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {!pvs.length && addedKey === noVariantKey && (
+                              <span className="text-xs text-green-600 font-medium">Added ✓</span>
+                            )}
+                            {pvs.length > 0 && (
+                              <span className="text-xs text-muted-foreground">{isExpanded ? '▲' : '▼'} {pvs.length}</span>
+                            )}
+                          </div>
+                        </button>
+                        {isExpanded && pvs.map(v => {
+                          const vKey = `${p.id}|${v.size || ''}|${v.color || ''}`;
+                          const isAdded = addedKey === vKey;
+                          const label = [v.size, v.color].filter(Boolean).join(' / ') || v.sku || '—';
+                          return (
+                            <button key={`${v.sku || ''}-${v.size || ''}-${v.color || ''}`}
+                              onClick={() => addProductToOrder(p, v)}
+                              className="w-full text-left px-5 py-1.5 rounded-xl hover:bg-card text-xs transition-colors flex items-center justify-between gap-2 ms-2">
+                              <span className="text-foreground">{label}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {v.price_usd && <span className="text-muted-foreground">${Number(v.price_usd).toFixed(2)}</span>}
+                                {isAdded && <span className="text-green-600 font-medium">Added ✓</span>}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
