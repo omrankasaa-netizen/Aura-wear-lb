@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Printer, MessageCircle, ChevronRight, Gift, Pencil, Plus, Loader2 } from 'lucide-react';
 import { logAction } from '@/lib/auditLog';
-import { commitStock, releaseStock, reserveOrderStock } from '@/lib/inventory';
+import { commitStock, releaseStock, reserveOrderStock, editOrderItems } from '@/lib/inventory';
 import { useDiscounts } from '@/contexts/DiscountContext';
 import { computeOrderTotals } from '@/lib/orderPricing';
 import { toast } from '@/components/ui/use-toast';
@@ -38,6 +38,9 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
   const [showPicker, setShowPicker] = useState(false);
   const [expandedProductId, setExpandedProductId] = useState(null);
   const [addedKey, setAddedKey] = useState(null);
+  const [editDelivery, setEditDelivery] = useState('0');
+  const [editTotalOverridden, setEditTotalOverridden] = useState(false);
+  const [editTotalInput, setEditTotalInput] = useState('0.00');
 
   const { data: items = [] } = useQuery({
     queryKey: ['order-items', order.id],
@@ -87,6 +90,9 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
     setShowPicker(false);
     setExpandedProductId(null);
     setAddedKey(null);
+    setEditDelivery(String(Number(order.delivery_fee_usd || 0)));
+    setEditTotalOverridden(!!order.total_overridden);
+    setEditTotalInput(Number(order.grand_total_usd || 0).toFixed(2));
     setEditing(true);
   }
 
@@ -140,8 +146,8 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
     items: editItems,
     orderDiscountType: order.order_discount_type || 'fixed',
     orderDiscountValue: order.order_discount_value || 0,
-    deliveryFee: order.delivery_fee_usd || 0,
-    finalTotalOverride: order.total_overridden ? order.grand_total_usd : null,
+    deliveryFee: parseFloat(editDelivery) || 0,
+    finalTotalOverride: editTotalOverridden ? (parseFloat(editTotalInput) || 0) : null,
   });
 
   async function saveEdit() {
@@ -171,49 +177,33 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
     }
     setEditSaving(true);
     try {
-      const currentById = new Map(items.map(it => [it.id, it]));
-      const remainingIds = new Set(editItems.map(it => it.id).filter(Boolean));
-      const removedItems = items.filter(it => !remainingIds.has(it.id));
-      const updatedItems = editItems.filter(it => {
-        if (!it.id) return false;
-        const current = currentById.get(it.id);
-        if (!current) return false;
-        return (
-          Number(current.quantity || 0) !== Number(it.quantity || 0) ||
-          Number(current.unit_price_usd || 0) !== Number(it.unit_price_usd || 0) ||
-          (current.sku || '') !== (it.sku || '') ||
-          (current.size || '') !== (it.size || '') ||
-          (current.color || '') !== (it.color || '')
-        );
-      });
-      const newItems = editItems.filter(it => !it.id);
-
-      await Promise.all(removedItems.map(it => base44.entities.OrderItem.delete(it.id)));
-      await Promise.all(updatedItems.map(it => base44.entities.OrderItem.update(it.id, {
-        quantity: Number(it.quantity) || 1,
-        sku: it.sku || '',
-        size: it.size || '',
-        color: it.color || '',
-        unit_price_usd: Number(it.unit_price_usd) || 0,
-        line_total_usd: (Number(it.unit_price_usd) || 0) * (Number(it.quantity) || 0),
-      })));
-      await Promise.all(newItems.map(it => base44.entities.OrderItem.create({
-        order_id: order.id,
+      // Atomic server-side edit: releases old lines' stock, validates new
+      // ones, rewrites OrderItems and persists totals (with overrides) in one
+      // transaction — or rolls everything back on shortage.
+      const res = await editOrderItems(order.id, editItems.map(it => ({
         product_id: it.product_id,
-        product_name: it.product_name,
-        sku: it.sku || '',
         size: it.size || '',
         color: it.color || '',
         quantity: Number(it.quantity) || 1,
         unit_price_usd: Number(it.unit_price_usd) || 0,
-        line_total_usd: (Number(it.unit_price_usd) || 0) * (Number(it.quantity) || 0),
-      })));
+      })), '', {
+        delivery_fee_usd: parseFloat(editDelivery) || 0,
+        discount_usd: editTotals.orderDiscount,
+        ...(editTotalOverridden ? { grand_total_usd: parseFloat(editTotalInput) || 0, total_overridden: true } : {}),
+      });
+      if (!res || res.ok !== true) {
+        setEditShortages(res?.shortages || []);
+        setEditErr(res?.error || 'Not enough stock for this edit — nothing was changed.');
+        return;
+      }
 
-      let extra = {};
+      // Needs-review imports are unreserved: now that the lines are valid,
+      // hold the stock. On shortage the EDIT STAYS but the order keeps its
+      // needs_review flag so staff adjust quantities and retry.
       if (!order.stock_reserved && !order.stock_committed) {
         const reservation = await reserveOrderStock(order.id);
         if (reservation?.ok) {
-          extra = { stock_reserved: true, needs_review: false, import_errors: null };
+          await base44.entities.Order.update(order.id, { needs_review: false, import_errors: null });
           setReserveErr('');
         } else {
           setEditShortages(reservation?.shortages || []);
@@ -221,14 +211,6 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
           setReserveErr(`Items saved, but stock could not be reserved${names ? `: ${names}` : ' — insufficient stock'}. Adjust quantities and Edit Items again.`);
         }
       }
-
-      await base44.entities.Order.update(order.id, {
-        subtotal_usd: editTotals.subtotal,
-        discount_usd: editTotals.orderDiscount,
-        grand_total_usd: editTotals.grandTotal,
-        total_overridden: editTotals.totalOverridden,
-        ...extra,
-      });
       await logAction({ action: 'order_items_edited', entity: 'Order', entityId: order.id, userName: currentUser?.email });
 
       const refreshedOrder = await base44.entities.Order.get(order.id);
@@ -514,14 +496,18 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
                             <div key={p.id}>
                               <button
                                 onClick={() => handlePickerProductClick(p)}
-                                className="w-full text-left px-3 py-2 rounded-xl hover:bg-card text-sm transition-colors flex items-center justify-between gap-2"
+                                disabled={!pvs.length && editItems.some(it => it.product_id === p.id)}
+                                className="w-full text-left px-3 py-2 rounded-xl hover:bg-card text-sm transition-colors flex items-center justify-between gap-2 disabled:opacity-50 disabled:hover:bg-transparent"
                               >
                                 <div className="min-w-0 flex-1">
                                   <span className="font-medium text-foreground">{p.name}</span>
                                   <span className="text-muted-foreground ms-2">${p.price_usd?.toFixed(2)}</span>
                                 </div>
                                 <div className="flex items-center gap-1.5 shrink-0">
-                                  {!pvs.length && addedKey === noVariantKey && (
+                                  {!pvs.length && editItems.some(it => it.product_id === p.id) && (
+                                    <span className="text-xs text-muted-foreground font-medium">On order — edit qty</span>
+                                  )}
+                                  {!pvs.length && !editItems.some(it => it.product_id === p.id) && addedKey === noVariantKey && (
                                     <span className="text-xs text-green-600 font-medium">Added ✓</span>
                                   )}
                                   {pvs.length > 0 && (
@@ -532,17 +518,20 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
                               {isExpanded && pvs.map(v => {
                                 const vKey = `${p.id}|${v.size || ''}|${v.color || ''}`;
                                 const isAdded = addedKey === vKey;
+                                const onOrder = editItems.some(it => it.product_id === p.id && (it.size || '') === (v.size || '') && (it.color || '') === (v.color || ''));
                                 const label = [v.size, v.color].filter(Boolean).join(' / ') || v.sku || '—';
                                 return (
                                   <button
                                     key={`${v.sku || ''}-${v.size || ''}-${v.color || ''}`}
                                     onClick={() => addProductToEdit(p, v)}
-                                    className="w-full text-left px-5 py-1.5 rounded-xl hover:bg-card text-xs transition-colors flex items-center justify-between gap-2 ms-2"
+                                    disabled={onOrder}
+                                    className="w-full text-left px-5 py-1.5 rounded-xl hover:bg-card text-xs transition-colors flex items-center justify-between gap-2 ms-2 disabled:opacity-50 disabled:hover:bg-transparent"
                                   >
                                     <span className="text-foreground">{label}</span>
                                     <div className="flex items-center gap-2 shrink-0">
                                       {v.price_usd && <span className="text-muted-foreground">${Number(v.price_usd).toFixed(2)}</span>}
-                                      {isAdded && <span className="text-green-600 font-medium">Added ✓</span>}
+                                      {onOrder && <span className="text-muted-foreground font-medium">On order</span>}
+                                      {!onOrder && isAdded && <span className="text-green-600 font-medium">Added ✓</span>}
                                     </div>
                                   </button>
                                 );
@@ -559,15 +548,44 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
                 <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 space-y-1 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">New subtotal</span><span>${editTotals.subtotal.toFixed(2)}</span></div>
                   {editTotals.orderDiscount > 0 && <div className="flex justify-between text-green-700"><span>Discount (kept)</span><span>-${Number(editTotals.orderDiscount).toFixed(2)}</span></div>}
-                  <div className="flex justify-between"><span className="text-muted-foreground">Delivery (kept)</span><span>${Number(order.delivery_fee_usd || 0).toFixed(2)}</span></div>
-                  <div className="flex justify-between font-bold border-t border-border pt-1.5">
-                    <span>New total</span>
-                    <span className="text-primary">${editTotals.grandTotal.toFixed(2)}
-                      {Math.abs(editTotals.grandTotal - Number(order.grand_total_usd || 0)) > 0.001 && (
-                        <span className="text-xs font-normal text-muted-foreground"> (was ${Number(order.grand_total_usd || 0).toFixed(2)})</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">Delivery fee</span>
+                    <div className="flex items-center gap-1.5">
+                      {(parseFloat(editDelivery) || 0) !== Number(order.delivery_fee_usd || 0) && (
+                        <button type="button" onClick={() => setEditDelivery(String(Number(order.delivery_fee_usd || 0)))}
+                          className="text-[11px] text-muted-foreground hover:text-foreground underline">reset</button>
                       )}
-                    </span>
+                      <span className="text-muted-foreground">$</span>
+                      <input type="number" min="0" step="0.5" value={editDelivery}
+                        onChange={e => setEditDelivery(e.target.value)}
+                        title="Set 0 to remove the delivery fee"
+                        className="w-20 text-right px-2 py-1 rounded-lg border border-input bg-background text-sm" />
+                    </div>
                   </div>
+                  <div className="flex items-center justify-between gap-2 font-bold border-t border-border pt-1.5">
+                    <span>New total</span>
+                    <div className="flex items-center gap-1.5">
+                      <button type="button"
+                        onClick={() => { setEditTotalOverridden(true); setEditTotalInput(String(Math.ceil(editTotals.autoTotal))); }}
+                        title="Round up to the next whole dollar"
+                        className="text-[11px] font-medium px-2 py-1 rounded-lg bg-muted text-muted-foreground hover:text-foreground">Round ↑</button>
+                      {editTotalOverridden && (
+                        <button type="button" onClick={() => setEditTotalOverridden(false)}
+                          title="Reset to auto total"
+                          className="text-[11px] text-muted-foreground hover:text-foreground underline">auto</button>
+                      )}
+                      <span className="text-primary">$</span>
+                      <input type="number" min="0" step="0.01" value={editTotalOverridden ? editTotalInput : editTotals.autoTotal.toFixed(2)}
+                        onChange={e => { setEditTotalOverridden(true); setEditTotalInput(e.target.value); }}
+                        className="w-24 text-right px-2 py-1 rounded-lg border border-input bg-background text-sm font-bold text-primary" />
+                      {Math.abs(editTotals.grandTotal - Number(order.grand_total_usd || 0)) > 0.001 && (
+                        <span className="text-xs font-normal text-muted-foreground">(was ${Number(order.grand_total_usd || 0).toFixed(2)})</span>
+                      )}
+                    </div>
+                  </div>
+                  {editTotalOverridden && (
+                    <p className="text-[11px] text-amber-700 text-right">Manual total override — this is the stored total.</p>
+                  )}
                   {order.payment_method === 'Cash on Delivery' && Math.abs(editTotals.grandTotal - Number(order.grand_total_usd || 0)) > 0.001 && (
                     <p className="text-xs text-amber-700 pt-1">💵 COD: tell the courier the new amount is ${editTotals.grandTotal.toFixed(2)}.</p>
                   )}

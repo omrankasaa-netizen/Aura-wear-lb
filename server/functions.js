@@ -353,7 +353,7 @@ function releaseStock({ order_id }, user) {
 // Discount and delivery fee are preserved as originally set.
 const ORDER_EDIT_LOCKED_STATUSES = ['Out for Delivery', 'Delivered', 'Cancelled'];
 
-function editOrderItems({ order_id, items: newItems, note }, user) {
+function editOrderItems({ order_id, items: newItems, note, delivery_fee_usd, discount_usd, grand_total_usd, total_overridden }, user) {
   const o = queryRecords('Order', { query: { id: order_id }, limit: 1 })[0];
   if (!o) return { _status: 404, error: 'Order not found' };
   if (ORDER_EDIT_LOCKED_STATUSES.includes(o.order_status)) {
@@ -400,8 +400,11 @@ function editOrderItems({ order_id, items: newItems, note }, user) {
     }
 
     // Pass 2 — validate every NEW line against post-release availability.
+    // Quantities accumulate per variant/product (claimed) so duplicate lines
+    // can't jointly oversell what each would pass individually.
     const plan = [];
     const shortages = [];
+    const claimed = new Map();
     for (const it of newItems) {
       const qty = Number(it.quantity);
       const { product, variant } = resolveLineTarget({ product_id: it.product_id, size: it.size || '', color: it.color || '' });
@@ -414,17 +417,21 @@ function editOrderItems({ order_id, items: newItems, note }, user) {
           shortages.push({ name: product.name, available: 0, needed: qty, reason: `Variant not found (${[it.size, it.color].filter(Boolean).join(', ')})` });
           continue;
         }
-        const available = (variant.qty_on_hand || 0) - (variant.qty_reserved || 0);
+        const claimKey = `v:${variant.id}`;
+        const available = (variant.qty_on_hand || 0) - (variant.qty_reserved || 0) - (claimed.get(claimKey) || 0);
         if (available < qty) {
-          shortages.push({ name: `${product.name} (${[it.size, it.color].filter(Boolean).join(', ')})`, available, needed: qty });
+          shortages.push({ name: `${product.name} (${[it.size, it.color].filter(Boolean).join(', ')})`, available: Math.max(0, available), needed: qty });
         } else {
+          claimed.set(claimKey, (claimed.get(claimKey) || 0) + qty);
           plan.push({ isVariant: true, target: variant, product, qty, available });
         }
       } else {
-        const available = (product.stock_quantity || 0) - (product.qty_reserved || 0);
+        const claimKey = `p:${product.id}`;
+        const available = (product.stock_quantity || 0) - (product.qty_reserved || 0) - (claimed.get(claimKey) || 0);
         if (available < qty) {
-          shortages.push({ name: product.name, available, needed: qty });
+          shortages.push({ name: product.name, available: Math.max(0, available), needed: qty });
         } else {
+          claimed.set(claimKey, (claimed.get(claimKey) || 0) + qty);
           plan.push({ isVariant: false, target: product, product, qty, available });
         }
       }
@@ -473,14 +480,23 @@ function editOrderItems({ order_id, items: newItems, note }, user) {
     });
     bulkCreate('OrderItem', itemDocs);
 
-    // Recalculate totals. Discount and delivery fee stay as originally agreed.
+    // Recalculate totals. Delivery fee / discount can be overridden by the
+    // admin (e.g. free delivery, rounding); otherwise they stay as agreed.
     const subtotal = itemDocs.reduce((sum, d) => sum + d.line_total_usd, 0);
-    const discount = Number(o.discount_usd || 0);
-    const delivery = Number(o.delivery_fee_usd || 0);
-    const grand = Math.max(0, subtotal - discount) + delivery;
-    updateRecord('Order', order_id, { subtotal_usd: subtotal, grand_total_usd: grand });
+    const validMoney = (v) => Number.isFinite(Number(v)) && Number(v) >= 0;
+    const discount = validMoney(discount_usd) ? Number(discount_usd) : Number(o.discount_usd || 0);
+    const delivery = validMoney(delivery_fee_usd) ? Number(delivery_fee_usd) : Number(o.delivery_fee_usd || 0);
+    const overridden = !!total_overridden && validMoney(grand_total_usd);
+    const grand = overridden ? Number(grand_total_usd) : Math.max(0, subtotal - discount) + delivery;
+    updateRecord('Order', order_id, {
+      subtotal_usd: subtotal,
+      discount_usd: discount,
+      delivery_fee_usd: delivery,
+      grand_total_usd: grand,
+      total_overridden: overridden ? true : false,
+    });
 
-    return { movements: movements.length, items: itemDocs.length, subtotal_usd: subtotal, grand_total_usd: grand };
+    return { movements: movements.length, items: itemDocs.length, subtotal_usd: subtotal, grand_total_usd: grand, delivery_fee_usd: delivery };
   });
 
   try {
