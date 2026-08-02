@@ -213,6 +213,10 @@ function buildDashboardSnapshot() {
   const revenuePrev7d = revWindow(prev7d);
   const paidThisMonth = ordersThisMonth.filter(isRevenue).length;
   const aov = paidThisMonth > 0 ? revenueThisMonth / paidThisMonth : 0;
+  // All-time rollups for the dashboard "All time" toggle.
+  const revenueAll = revWindow(orders);
+  const paidAll = orders.filter(isRevenue).length;
+  const aovAll = paidAll > 0 ? revenueAll / paidAll : 0;
 
   // 7-day revenue + order sparkline
   const spark = { orders: [], revenue: [] };
@@ -259,6 +263,7 @@ function buildDashboardSnapshot() {
     spark,
     money: {
       revenueThisMonth, revenue7d, revenue30d, revenuePrev7d, aov,
+      revenueAll, aovAll,
     },
   };
 }
