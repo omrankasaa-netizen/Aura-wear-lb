@@ -346,6 +346,10 @@ export default function FinancesPage() {
   const TABS = isSuper ? [...BASE_TABS, 'Projected Revenue'] : BASE_TABS;
   const [tab, setTab] = useState('Summary');
   const [selectedMonth, setSelectedMonth] = useState(currentLocalMonth());
+  // "All time" mode: selectedMonth === 'all' aggregates every month since launch.
+  const allTime = selectedMonth === 'all';
+  const inSelectedPeriod = (dstr) => allTime || localMonthKey(dstr) === selectedMonth;
+  const periodLabel = allTime ? 'all time' : 'this month';
   const [editPurchase, setEditPurchase] = useState(null);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [editPromo, setEditPromo] = useState(null);
@@ -361,7 +365,7 @@ export default function FinancesPage() {
   const [overheadForm, setOverheadForm] = useState({ rent_usd: 0, utilities_usd: 0, marketing_usd: 0, other_usd: 0 });
   const [savingOverhead, setSavingOverhead] = useState(false);
 
-  const currentOverhead = useMemo(() => overheads.find(o => o.month === selectedMonth), [overheads, selectedMonth]);
+  const currentOverhead = useMemo(() => overheads.find(o => o.month === (allTime ? currentLocalMonth() : selectedMonth)), [overheads, selectedMonth, allTime]);
 
   React.useEffect(() => {
     if (currentOverhead) {
@@ -379,7 +383,7 @@ export default function FinancesPage() {
   async function saveOverhead() {
     setSavingOverhead(true);
     try {
-      const data = { month: selectedMonth, ...overheadForm };
+      const data = { month: allTime ? currentLocalMonth() : selectedMonth, ...overheadForm };
       if (currentOverhead) await base44.entities.Overhead.update(currentOverhead.id, data);
       else await base44.entities.Overhead.create(data);
       qc.invalidateQueries({ queryKey: ['fin-overhead'] });
@@ -388,12 +392,15 @@ export default function FinancesPage() {
 
   // Summary calcs
   const monthOrders = useMemo(() => orders.filter(o => {
-    return localMonthKey(o.order_date || o.created_date) === selectedMonth && ['Confirmed', 'Packed', 'Out for Delivery', 'Delivered'].includes(o.order_status);
-  }), [orders, selectedMonth]);
+    return inSelectedPeriod(o.order_date || o.created_date) && ['Confirmed', 'Packed', 'Out for Delivery', 'Delivered'].includes(o.order_status);
+  }), [orders, selectedMonth, allTime]);
 
   const monthRevenue = monthOrders.reduce((s, o) => s + (o.grand_total_usd || 0), 0);
-  const monthPurchases = purchases.filter(p => localMonthKey(p.purchase_date) === selectedMonth).reduce((s, p) => s + (p.amount_usd || 0), 0);
-  const overheadTotal = (currentOverhead?.rent_usd || 0) + (currentOverhead?.utilities_usd || 0) + (currentOverhead?.marketing_usd || 0) + (currentOverhead?.other_usd || 0);
+  const monthPurchases = purchases.filter(p => inSelectedPeriod(p.purchase_date)).reduce((s, p) => s + (p.amount_usd || 0), 0);
+  // All-time mode sums every monthly overhead entry; single-month mode shows that month only.
+  const overheadTotal = allTime
+    ? overheads.reduce((s, o) => s + (o.rent_usd || 0) + (o.utilities_usd || 0) + (o.marketing_usd || 0) + (o.other_usd || 0), 0)
+    : (currentOverhead?.rent_usd || 0) + (currentOverhead?.utilities_usd || 0) + (currentOverhead?.marketing_usd || 0) + (currentOverhead?.other_usd || 0);
 
   // ── COGS-model monthly P&L ────────────────────────────────────────────────
   // Profit = what customers paid for products − base cost of what SOLD −
@@ -454,21 +461,21 @@ export default function FinancesPage() {
   // Purchase by category donut
   const byCategory = useMemo(() => {
     const map = {};
-    purchases.filter(p => localMonthKey(p.purchase_date) === selectedMonth).forEach(p => {
+    purchases.filter(p => inSelectedPeriod(p.purchase_date)).forEach(p => {
       map[p.category || 'Other'] = (map[p.category || 'Other'] || 0) + (p.amount_usd || 0);
     });
     return Object.entries(map).map(([name, value]) => ({ name, value: parseFloat(value.toFixed(2)) }));
-  }, [purchases, selectedMonth]);
+  }, [purchases, selectedMonth, allTime]);
 
   // Orders by channel
   const byChannel = useMemo(() => {
     const map = {};
-    orders.filter(o => localMonthKey(o.order_date || o.created_date) === selectedMonth).forEach(o => {
+    orders.filter(o => inSelectedPeriod(o.order_date || o.created_date)).forEach(o => {
       const ch = o.channel || 'Website';
       map[ch] = (map[ch] || 0) + 1;
     });
     return Object.entries(map).map(([channel, count]) => ({ channel, count }));
-  }, [orders, selectedMonth]);
+  }, [orders, selectedMonth, allTime]);
 
   if (!canAccess('view_finances')) return <AdminLayout><AccessDenied /></AdminLayout>;
 
@@ -508,8 +515,15 @@ export default function FinancesPage() {
         {tab !== 'Promo Codes' && tab !== 'Projected Revenue' && (
           <div className="flex items-center gap-3">
             <label className="text-sm text-muted-foreground">Month:</label>
-            <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-input bg-background text-sm" />
+            <input type="month" value={allTime ? '' : selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
+              disabled={allTime}
+              className="px-3 py-2 rounded-xl border border-input bg-background text-sm disabled:opacity-50" />
+            {tab !== 'Overhead' && (
+              <button onClick={() => setSelectedMonth(allTime ? currentLocalMonth() : 'all')}
+                className={`text-xs px-3 py-2 rounded-xl font-medium transition-colors ${allTime ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/70'}`}>
+                All time
+              </button>
+            )}
           </div>
         )}
 
@@ -539,7 +553,7 @@ export default function FinancesPage() {
             <div className="grid lg:grid-cols-2 gap-5">
               {/* P&L breakdown */}
               <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-                <h3 className="font-heading font-semibold text-foreground mb-4">Profit Breakdown (this month)</h3>
+                <h3 className="font-heading font-semibold text-foreground mb-4">Profit Breakdown ({periodLabel})</h3>
                 <dl className="space-y-2 text-sm">
                   {[
                     ['Product sales (lines)', monthPnl.productSales, false],
@@ -557,15 +571,15 @@ export default function FinancesPage() {
                   ))}
                 </dl>
                 <p className="text-[11px] text-muted-foreground mt-4">
-                  Restocking purchases this month: <b>${monthPurchases.toFixed(2)}</b> — tracked as cash out on the Purchases tab, deliberately NOT deducted here (unit costs already account for the goods sold).
+                  Restocking purchases ({periodLabel}): <b>${monthPurchases.toFixed(2)}</b> — tracked as cash out on the Purchases tab, deliberately NOT deducted here (unit costs already account for the goods sold).
                 </p>
               </div>
 
               {/* Top sellers */}
               <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-                <h3 className="font-heading font-semibold text-foreground mb-4">Top Sellers (this month)</h3>
+                <h3 className="font-heading font-semibold text-foreground mb-4">Top Sellers ({periodLabel})</h3>
                 {monthPnl.top.length === 0
-                  ? <p className="text-sm text-muted-foreground">No items sold this month.</p>
+                  ? <p className="text-sm text-muted-foreground">No items sold in this period.</p>
                   : (
                     <table className="w-full text-sm">
                       <thead>
@@ -610,7 +624,7 @@ export default function FinancesPage() {
               <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
                 <h3 className="font-heading font-semibold text-foreground mb-4">Spend by Category</h3>
                 {byCategory.length === 0
-                  ? <p className="text-sm text-muted-foreground text-center pt-8">No purchases this month</p>
+                  ? <p className="text-sm text-muted-foreground text-center pt-8">No purchases in this period</p>
                   : <ResponsiveContainer width="100%" height={200}>
                       <PieChart>
                         <Pie data={byCategory} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
@@ -625,9 +639,9 @@ export default function FinancesPage() {
 
             {/* Orders by channel */}
             <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-              <h3 className="font-heading font-semibold text-foreground mb-4">Orders by Channel (this month)</h3>
+              <h3 className="font-heading font-semibold text-foreground mb-4">Orders by Channel ({periodLabel})</h3>
               {byChannel.length === 0
-                ? <p className="text-sm text-muted-foreground">No orders this month</p>
+                ? <p className="text-sm text-muted-foreground">No orders in this period</p>
                 : <ResponsiveContainer width="100%" height={160}>
                     <BarChart data={byChannel} layout="vertical">
                       <XAxis type="number" tick={{ fontSize: 11 }} />
@@ -646,7 +660,7 @@ export default function FinancesPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                {purchases.filter(p => (p.purchase_date||'').slice(0,7) === selectedMonth).length} purchases — Total: ${purchases.filter(p => (p.purchase_date||'').slice(0,7) === selectedMonth).reduce((s,p) => s+(p.amount_usd||0), 0).toFixed(2)}
+                {purchases.filter(p => inSelectedPeriod(p.purchase_date)).length} purchases — Total: ${purchases.filter(p => inSelectedPeriod(p.purchase_date)).reduce((s,p) => s+(p.amount_usd||0), 0).toFixed(2)}
               </p>
               <button onClick={() => { setEditPurchase(null); setShowPurchaseModal(true); }}
                 className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-semibold hover:bg-primary/90">
@@ -666,7 +680,7 @@ export default function FinancesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {purchases.filter(p => (p.purchase_date||'').slice(0,7) === selectedMonth).map(p => (
+                  {purchases.filter(p => inSelectedPeriod(p.purchase_date)).map(p => (
                     <tr key={p.id} className="hover:bg-muted/20">
                       <td className="px-4 py-3 text-muted-foreground text-xs">{p.purchase_date}</td>
                       <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{p.category}</span></td>
@@ -681,8 +695,8 @@ export default function FinancesPage() {
                       </td>
                     </tr>
                   ))}
-                  {purchases.filter(p => (p.purchase_date||'').slice(0,7) === selectedMonth).length === 0 && (
-                    <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No purchases for this month.</td></tr>
+                  {purchases.filter(p => inSelectedPeriod(p.purchase_date)).length === 0 && (
+                    <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No purchases for this period.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -693,7 +707,7 @@ export default function FinancesPage() {
         {/* OVERHEAD */}
         {tab === 'Overhead' && (
           <div className="max-w-md space-y-4">
-            <p className="text-sm text-muted-foreground">Monthly fixed costs for {selectedMonth}</p>
+            <p className="text-sm text-muted-foreground">Monthly fixed costs for {allTime ? currentLocalMonth() : selectedMonth}</p>
             <div className="bg-card border border-border rounded-2xl p-6 space-y-4 shadow-sm">
               {[['rent_usd','Rent'],['utilities_usd','Utilities (electricity, internet…)'],['marketing_usd','Marketing / Ads'],['other_usd','Other']].map(([k, label]) => (
                 <div key={k}>
@@ -709,7 +723,7 @@ export default function FinancesPage() {
               </div>
               <button onClick={saveOverhead} disabled={savingOverhead}
                 className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50">
-                {savingOverhead ? 'Saving…' : `Save ${selectedMonth} Overhead`}
+                {savingOverhead ? 'Saving…' : `Save ${allTime ? currentLocalMonth() : selectedMonth} Overhead`}
               </button>
             </div>
           </div>

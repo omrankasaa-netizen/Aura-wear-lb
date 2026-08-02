@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuthUser } from '@/contexts/AuthUserContext';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { base44 } from '@/api/base44Client';
@@ -50,6 +50,8 @@ function Sparkline({ data = [], color = 'hsl(var(--primary))' }) {
 export default function AdminDashboard() {
   const { currentUser } = useAuthUser();
   const navigate = useNavigate();
+  // KPI window toggle: rolling 30 days vs all-time (since launch).
+  const [allTime, setAllTime] = useState(false);
 
   // Single server-computed snapshot. Money fields are stripped server-side for
   // non-super-admins, so the browser never receives them. Live refetch keeps the
@@ -91,15 +93,15 @@ export default function AdminDashboard() {
           <KpiCard icon={AlertTriangle} label="Low Stock"         value={c.lowStockCount}     color="bg-amber-50 text-amber-600"          loading={isLoading} />
           <KpiCard icon={XCircle}       label="Out of Stock"      value={c.outOfStockCount}   color="bg-destructive/10 text-destructive"  loading={isLoading} />
           <KpiCard icon={ShoppingBag}   label="Orders Today"      value={c.ordersToday}       color="bg-blue-50 text-blue-600"            loading={isLoading} />
-          <KpiCard icon={ShoppingBag}   label="Orders (30d)"      value={c.orders30d}         sub={trendPct != null ? `${trendPct >= 0 ? '▲' : '▼'} ${Math.abs(trendPct)}% vs prev 7d` : undefined} color="bg-indigo-50 text-indigo-600" loading={isLoading} />
+          <KpiCard icon={ShoppingBag}   label={allTime ? 'Orders (all time)' : 'Orders (30d)'} value={allTime ? c.ordersAll : c.orders30d} sub={!allTime && trendPct != null ? `${trendPct >= 0 ? '▲' : '▼'} ${Math.abs(trendPct)}% vs prev 7d` : undefined} color="bg-indigo-50 text-indigo-600" loading={isLoading} />
           <KpiCard icon={Package}       label="Open Orders"       value={c.openOrders}        color="bg-violet-50 text-violet-600"        loading={isLoading} />
           <KpiCard icon={Users}         label="Customers"         value={c.totalCustomers}    color="bg-teal-50 text-teal-600"            loading={isLoading} />
           {showMoney && (
             <>
-              <KpiCard icon={TrendingUp} label="Revenue This Month" value={`$${(money.revenueThisMonth || 0).toFixed(2)}`} color="bg-green-50 text-green-700" loading={isLoading} />
-              <KpiCard icon={BarChart2}  label="Avg Order Value"    value={`$${(money.aov || 0).toFixed(2)}`}              color="bg-emerald-50 text-emerald-700" loading={isLoading} />
+              <KpiCard icon={TrendingUp} label={allTime ? 'Revenue (all time)' : 'Revenue This Month'} value={`$${(allTime ? (money.revenueAll || 0) : (money.revenueThisMonth || 0)).toFixed(2)}`} color="bg-green-50 text-green-700" loading={isLoading} />
+              <KpiCard icon={BarChart2}  label={allTime ? 'Avg Order Value (all time)' : 'Avg Order Value'} value={`$${(allTime ? (money.aovAll || 0) : (money.aov || 0)).toFixed(2)}`} color="bg-emerald-50 text-emerald-700" loading={isLoading} />
               <KpiCard icon={TrendingUp} label="Revenue (7d)"       value={`$${(money.revenue7d || 0).toFixed(2)}`}        color="bg-green-50 text-green-700" loading={isLoading} />
-              <KpiCard icon={TrendingUp} label="Revenue (30d)"      value={`$${(money.revenue30d || 0).toFixed(2)}`}       color="bg-green-50 text-green-700" loading={isLoading} />
+              <KpiCard icon={TrendingUp} label={allTime ? 'Revenue (30d)' : 'Revenue (30d)'} value={`$${(money.revenue30d || 0).toFixed(2)}`} color="bg-green-50 text-green-700" loading={isLoading} />
             </>
           )}
         </div>
