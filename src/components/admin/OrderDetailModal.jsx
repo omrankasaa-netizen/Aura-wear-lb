@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { X, Printer, MessageCircle, ChevronRight, Gift, Pencil, Plus, Minus, Trash2 } from 'lucide-react';
+import { X, Printer, MessageCircle, ChevronRight, Gift, Pencil, Plus, Loader2 } from 'lucide-react';
 import { logAction } from '@/lib/auditLog';
-import { commitStock, releaseStock, editOrderItems, reserveOrderStock, availableQty } from '@/lib/inventory';
+import { commitStock, releaseStock, reserveOrderStock } from '@/lib/inventory';
 import { useDiscounts } from '@/contexts/DiscountContext';
+import { computeOrderTotals } from '@/lib/orderPricing';
+import { toast } from '@/components/ui/use-toast';
 
 const STATUS_FLOW = ['New', 'Confirmed', 'Packed', 'Out for Delivery', 'Delivered'];
 const STATUS_COLORS = {
@@ -32,7 +34,10 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
   const [editErr, setEditErr] = useState('');
   const [reserveErr, setReserveErr] = useState('');
   const [editShortages, setEditShortages] = useState([]);
-  const [addSearch, setAddSearch] = useState('');
+  const [productSearch, setProductSearch] = useState('');
+  const [showPicker, setShowPicker] = useState(false);
+  const [expandedProductId, setExpandedProductId] = useState(null);
+  const [addedKey, setAddedKey] = useState(null);
 
   const { data: items = [] } = useQuery({
     queryKey: ['order-items', order.id],
@@ -45,71 +50,104 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
   });
 
   // ── Edit-mode data (products + variants, only when editing) ──────────────
-  const { data: allProducts = [] } = useQuery({
-    queryKey: ['order-edit-products'],
-    queryFn: () => base44.entities.Product.filter({ status: 'Active' }, 'name', 500),
+  const { data: products = [] } = useQuery({
+    queryKey: ['order-products'],
+    queryFn: () => base44.entities.Product.filter({ status: 'Active' }, 'name', 200),
     enabled: editing,
   });
-  const { data: allVariants = [] } = useQuery({
-    queryKey: ['order-edit-variants'],
-    queryFn: () => base44.entities.ProductVariant.list('-created_date', 2000),
+  const { data: variants = [] } = useQuery({
+    queryKey: ['order-variants'],
+    queryFn: () => base44.entities.ProductVariant.list('-created_date', 1000),
     enabled: editing,
   });
 
-  const editVariantsByProduct = {};
-  for (const v of allVariants) {
-    if (!editVariantsByProduct[v.product_id]) editVariantsByProduct[v.product_id] = [];
-    editVariantsByProduct[v.product_id].push(v);
+  const variantsByProduct = {};
+  for (const v of variants) {
+    if (!variantsByProduct[v.product_id]) variantsByProduct[v.product_id] = [];
+    variantsByProduct[v.product_id].push(v);
   }
   const editProductsById = {};
-  for (const p of allProducts) editProductsById[p.id] = p;
+  for (const p of products) editProductsById[p.id] = p;
 
   function startEditing() {
     setEditItems(items.map(it => ({
       key: it.id,
+      id: it.id,
       product_id: it.product_id,
       product_name: it.product_name,
       sku: it.sku || '',
       size: it.size || '',
       color: it.color || '',
-      quantity: it.quantity,
+      quantity: Math.max(1, Number(it.quantity) || 1),
       unit_price_usd: Number(it.unit_price_usd || 0),
     })));
     setEditErr('');
     setEditShortages([]);
-    setAddSearch('');
+    setProductSearch('');
+    setShowPicker(false);
+    setExpandedProductId(null);
+    setAddedKey(null);
     setEditing(true);
   }
 
-  function patchEditItem(key, patch) {
-    setEditItems(prev => prev.map(it => (it.key === key ? { ...it, ...patch } : it)));
+  function updateEditItem(key, field, value) {
+    setEditItems(prev => prev.map(it => (it.key === key ? { ...it, [field]: value } : it)));
   }
 
-  function addProductToEdit(product) {
-    const pvs = editVariantsByProduct[product.id] || [];
-    // Same effective-price source as the manual-order modal (live discounts).
+  function addProductToEdit(product, variant = null) {
+    const pvs = variantsByProduct[product.id] || [];
     const original = Number(product.price_usd) || 0;
     const effective = Number(getDiscountedPrice ? getDiscountedPrice(product) : original) || original;
-    const first = pvs[0];
+    const size = variant ? (variant.size || '') : (pvs.length > 0 ? pvs[0].size || '' : '');
+    const color = variant ? (variant.color || '') : (pvs.length > 0 ? pvs[0].color || '' : '');
+    const unitPrice = variant?.price_usd ? Number(variant.price_usd) : effective;
+    const sku = variant?.sku || product.sku || '';
+
     setEditItems(prev => [...prev, {
       key: `new-${Date.now()}-${Math.random()}`,
+      id: null,
       product_id: product.id,
       product_name: product.name,
-      sku: product.sku || '',
-      size: first?.size || '',
-      color: first?.color || '',
+      sku,
+      size,
+      color,
       quantity: 1,
-      unit_price_usd: effective,
+      unit_price_usd: unitPrice,
     }]);
-    setAddSearch('');
+    const key = `${product.id}|${size}|${color}`;
+    setAddedKey(key);
+    setTimeout(() => setAddedKey(null), 1500);
   }
 
-  const editSubtotal = editItems.reduce((sum, it) => sum + it.unit_price_usd * it.quantity, 0);
-  const editGrand = Math.max(0, editSubtotal - Number(order.discount_usd || 0)) + Number(order.delivery_fee_usd || 0);
+  function handlePickerProductClick(product) {
+    const pvs = variantsByProduct[product.id] || [];
+    if (pvs.length > 0) {
+      setExpandedProductId(prev => (prev === product.id ? null : product.id));
+    } else {
+      addProductToEdit(product, null);
+    }
+  }
+
+  function removeEditItem(key) {
+    setEditItems(prev => prev.filter(it => it.key !== key));
+  }
+
+  const filteredProducts = products.filter(p =>
+    !productSearch || p.name.toLowerCase().includes(productSearch.toLowerCase()) || (p.sku || '').toLowerCase().includes(productSearch.toLowerCase())
+  ).slice(0, 20);
+
+  const editTotals = computeOrderTotals({
+    items: editItems,
+    orderDiscountType: order.order_discount_type || 'fixed',
+    orderDiscountValue: order.order_discount_value || 0,
+    deliveryFee: order.delivery_fee_usd || 0,
+    finalTotalOverride: order.total_overridden ? order.grand_total_usd : null,
+  });
 
   async function saveEdit() {
     setEditErr('');
     setEditShortages([]);
+    setReserveErr('');
     if (editItems.length === 0) {
       setEditErr('An order needs at least one item — use Cancel Order instead.');
       return;
@@ -120,54 +158,103 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
         return;
       }
       const product = editProductsById[it.product_id];
-      const pvs = editVariantsByProduct[it.product_id] || [];
+      const pvs = variantsByProduct[it.product_id] || [];
       if (product?.has_variants && pvs.length > 0 && !pvs.some(v => (v.size || '') === (it.size || '') && (v.color || '') === (it.color || ''))) {
         setEditErr(`Pick a valid variant for "${it.product_name}".`);
         return;
       }
-      if (!Number.isInteger(it.quantity) || it.quantity < 1) {
+      const quantity = Number(it.quantity);
+      if (!Number.isInteger(quantity) || quantity < 1) {
         setEditErr(`Quantity for "${it.product_name}" must be at least 1.`);
         return;
       }
     }
     setEditSaving(true);
     try {
-      const res = await editOrderItems(order.id, editItems.map(it => ({
-        product_id: it.product_id,
+      const currentById = new Map(items.map(it => [it.id, it]));
+      const remainingIds = new Set(editItems.map(it => it.id).filter(Boolean));
+      const removedItems = items.filter(it => !remainingIds.has(it.id));
+      const updatedItems = editItems.filter(it => {
+        if (!it.id) return false;
+        const current = currentById.get(it.id);
+        if (!current) return false;
+        return (
+          Number(current.quantity || 0) !== Number(it.quantity || 0) ||
+          Number(current.unit_price_usd || 0) !== Number(it.unit_price_usd || 0) ||
+          (current.sku || '') !== (it.sku || '') ||
+          (current.size || '') !== (it.size || '') ||
+          (current.color || '') !== (it.color || '')
+        );
+      });
+      const newItems = editItems.filter(it => !it.id);
+
+      await Promise.all(removedItems.map(it => base44.entities.OrderItem.delete(it.id)));
+      await Promise.all(updatedItems.map(it => base44.entities.OrderItem.update(it.id, {
+        quantity: Number(it.quantity) || 1,
+        sku: it.sku || '',
         size: it.size || '',
         color: it.color || '',
-        quantity: it.quantity,
-        unit_price_usd: it.unit_price_usd,
+        unit_price_usd: Number(it.unit_price_usd) || 0,
+        line_total_usd: (Number(it.unit_price_usd) || 0) * (Number(it.quantity) || 0),
       })));
-      if (!res || res.ok !== true) {
-        setEditShortages(res?.shortages || []);
-        setEditErr(res?.error || 'Not enough stock for this edit — nothing was changed.');
-        return;
-      }
-      await logAction({ action: 'order_items_edited', entity: 'Order', entityId: order.id, userName: currentUser?.email });
-      // Needs-review imports are unreserved: now that the lines are valid,
-      // hold the stock. On shortage the EDIT STAYS but the order keeps its
-      // needs_review flag so staff adjust quantities and retry.
+      await Promise.all(newItems.map(it => base44.entities.OrderItem.create({
+        order_id: order.id,
+        product_id: it.product_id,
+        product_name: it.product_name,
+        sku: it.sku || '',
+        size: it.size || '',
+        color: it.color || '',
+        quantity: Number(it.quantity) || 1,
+        unit_price_usd: Number(it.unit_price_usd) || 0,
+        line_total_usd: (Number(it.unit_price_usd) || 0) * (Number(it.quantity) || 0),
+      })));
+
       let extra = {};
       if (!order.stock_reserved && !order.stock_committed) {
         const reservation = await reserveOrderStock(order.id);
         if (reservation?.ok) {
-          await base44.entities.Order.update(order.id, { needs_review: false, import_errors: null });
           extra = { stock_reserved: true, needs_review: false, import_errors: null };
           setReserveErr('');
         } else {
+          setEditShortages(reservation?.shortages || []);
           const names = (reservation?.shortages || []).map(x => x.name).filter(Boolean).join(', ');
           setReserveErr(`Items saved, but stock could not be reserved${names ? `: ${names}` : ' — insufficient stock'}. Adjust quantities and Edit Items again.`);
         }
       }
-      queryClient.invalidateQueries({ queryKey: ['order-items', order.id] });
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
+
+      await base44.entities.Order.update(order.id, {
+        subtotal_usd: editTotals.subtotal,
+        discount_usd: editTotals.orderDiscount,
+        grand_total_usd: editTotals.grandTotal,
+        total_overridden: editTotals.totalOverridden,
+        ...extra,
+      });
+      await logAction({ action: 'order_items_edited', entity: 'Order', entityId: order.id, userName: currentUser?.email });
+
+      const refreshedOrder = await base44.entities.Order.get(order.id);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['order-items', order.id] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['orders'] }),
+      ]);
+
+      toast({
+        title: 'Order items updated',
+        description: 'Line-item changes were saved successfully.',
+      });
       setEditing(false);
-      onUpdated({ ...order, subtotal_usd: res.subtotal_usd, grand_total_usd: res.grand_total_usd, ...extra });
+      setShowPicker(false);
+      setExpandedProductId(null);
+      setProductSearch('');
+      onUpdated(refreshedOrder);
     } catch (e) {
-      const data = e?.data?.data || e?.data || {};
-      setEditShortages(data.shortages || []);
-      setEditErr(data.error || e.message || 'Edit failed — nothing was changed.');
+      const message = e?.data?.error || e?.message || 'Edit failed — staged changes were kept.';
+      setEditErr(message);
+      toast({
+        title: 'Could not save line items',
+        description: message,
+        variant: 'destructive',
+      });
     } finally {
       setEditSaving(false);
     }
@@ -349,104 +436,147 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
 
             {editing && (
               <div className="space-y-3">
-                <div className="bg-muted/30 rounded-xl overflow-hidden divide-y divide-border">
-                  {editItems.map((it) => {
-                    const pvs = editVariantsByProduct[it.product_id] || [];
-                    const hasVariants = pvs.length > 0;
-                    const selVariant = pvs.find(v => (v.size || '') === (it.size || '') && (v.color || '') === (it.color || ''));
-                    return (
-                      <div key={it.key} className="px-4 py-3 space-y-2">
-                        <div className="flex items-center gap-3">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate">{it.product_name}</p>
-                            <p className="text-xs text-muted-foreground">${it.unit_price_usd.toFixed(2)} each</p>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <button onClick={() => patchEditItem(it.key, { quantity: Math.max(1, it.quantity - 1) })}
-                              className="p-1 rounded-lg bg-muted hover:bg-muted/80"><Minus className="w-3.5 h-3.5" /></button>
-                            <span className="w-7 text-center text-sm font-semibold">{it.quantity}</span>
-                            <button onClick={() => patchEditItem(it.key, { quantity: Math.min(99, it.quantity + 1) })}
-                              className="p-1 rounded-lg bg-muted hover:bg-muted/80"><Plus className="w-3.5 h-3.5" /></button>
-                          </div>
-                          <span className="text-sm font-semibold w-16 text-right">${(it.unit_price_usd * it.quantity).toFixed(2)}</span>
-                          <button onClick={() => setEditItems(prev => prev.filter(x => x.key !== it.key))}
-                            className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10"><Trash2 className="w-4 h-4" /></button>
-                        </div>
-                        {hasVariants && (
-                          <div className="flex items-center gap-2 pl-1">
-                            <select
-                              value={`${it.size}|||${it.color}`}
-                              onChange={e => {
-                                const [size, color] = e.target.value.split('|||');
-                                patchEditItem(it.key, { size, color });
-                              }}
-                              className="text-xs border border-border rounded-lg px-2 py-1.5 bg-card text-foreground max-w-full">
-                              {pvs.map(v => (
-                                <option key={v.id} value={`${v.size || ''}|||${v.color || ''}`}>
-                                  {[v.size, v.color].filter(Boolean).join(' / ') || 'Default'} — {availableQty(v) + (selVariant && v.id === selVariant.id ? it.quantity : 0)} available
-                                </option>
-                              ))}
-                            </select>
-                            {selVariant && availableQty(selVariant) === 0 && it.quantity > 0 && (
-                              <span className="text-xs text-amber-600">only the {it.quantity} on this order in stock</span>
-                            )}
-                          </div>
-                        )}
+                <div className="bg-muted/30 rounded-xl overflow-hidden">
+                  <div className="hidden sm:grid grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_90px_90px_40px] gap-3 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground border-b border-border">
+                    <span>Product</span>
+                    <span>Variant</span>
+                    <span>Qty</span>
+                    <span>Unit</span>
+                    <span />
+                  </div>
+                  {editItems.map((it, i) => (
+                    <div
+                      key={it.key}
+                      className={`grid grid-cols-1 sm:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_90px_90px_40px] gap-3 px-4 py-3 items-center ${i > 0 ? 'border-t border-border sm:border-t-0' : ''}`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{it.product_name}</p>
+                        <p className="text-xs text-muted-foreground">{it.sku || 'No SKU'}</p>
                       </div>
-                    );
-                  })}
+                      <div className="text-sm text-muted-foreground">
+                        {[it.size, it.color].filter(Boolean).join(' / ') || 'Default'}
+                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        value={it.quantity}
+                        onChange={e => updateEditItem(it.key, 'quantity', Math.max(1, Number(e.target.value) || 1))}
+                        className="w-full px-2 py-1.5 rounded-lg border border-input bg-background text-sm"
+                      />
+                      <div className="text-sm font-semibold text-foreground">${Number(it.unit_price_usd || 0).toFixed(2)}</div>
+                      <button
+                        onClick={() => removeEditItem(it.key)}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        aria-label={`Remove ${it.product_name}`}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
                   {editItems.length === 0 && (
                     <p className="px-4 py-6 text-sm text-muted-foreground text-center">All items removed — add one below, or cancel the order instead.</p>
                   )}
                 </div>
 
-                {/* Add item */}
-                <div className="relative">
-                  <input
-                    value={addSearch}
-                    onChange={e => setAddSearch(e.target.value)}
-                    placeholder="Search products to add…"
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-card text-foreground"
-                  />
-                  {addSearch.trim() && (
-                    <div className="absolute z-10 left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                      {allProducts
-                        .filter(p => p.name?.toLowerCase().includes(addSearch.trim().toLowerCase()) || (p.sku || '').toLowerCase().includes(addSearch.trim().toLowerCase()))
-                        .filter(p => !editItems.some(it => it.product_id === p.id))
-                        .slice(0, 8)
-                        .map(p => (
-                          <button key={p.id} onClick={() => addProductToEdit(p)}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 text-sm">
-                            <span className="flex-1 truncate">{p.name}</span>
-                            <span className="text-xs text-muted-foreground">${Number(p.price_usd || 0).toFixed(2)}</span>
-                          </button>
-                        ))}
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <h5 className="text-sm font-semibold text-foreground">Edit Items</h5>
+                    <button
+                      onClick={() => setShowPicker(p => !p)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-muted text-xs font-medium hover:bg-muted/80"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Product
+                    </button>
+                  </div>
+
+                  {showPicker && (
+                    <div className="mb-3 bg-muted/50 border border-border rounded-xl p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={productSearch}
+                          onChange={e => setProductSearch(e.target.value)}
+                          placeholder="Search product…"
+                          className="flex-1 px-3 py-2 rounded-xl border border-input bg-background text-sm"
+                        />
+                        <button
+                          onClick={() => { setShowPicker(false); setProductSearch(''); setExpandedProductId(null); }}
+                          className="px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold shrink-0 hover:bg-primary/90"
+                        >
+                          ✓ Done
+                        </button>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto space-y-0.5">
+                        {filteredProducts.map(p => {
+                          const pvs = variantsByProduct[p.id] || [];
+                          const isExpanded = expandedProductId === p.id;
+                          const noVariantKey = `${p.id}||`;
+                          return (
+                            <div key={p.id}>
+                              <button
+                                onClick={() => handlePickerProductClick(p)}
+                                className="w-full text-left px-3 py-2 rounded-xl hover:bg-card text-sm transition-colors flex items-center justify-between gap-2"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <span className="font-medium text-foreground">{p.name}</span>
+                                  <span className="text-muted-foreground ms-2">${p.price_usd?.toFixed(2)}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {!pvs.length && addedKey === noVariantKey && (
+                                    <span className="text-xs text-green-600 font-medium">Added ✓</span>
+                                  )}
+                                  {pvs.length > 0 && (
+                                    <span className="text-xs text-muted-foreground">{isExpanded ? '▲' : '▼'} {pvs.length}</span>
+                                  )}
+                                </div>
+                              </button>
+                              {isExpanded && pvs.map(v => {
+                                const vKey = `${p.id}|${v.size || ''}|${v.color || ''}`;
+                                const isAdded = addedKey === vKey;
+                                const label = [v.size, v.color].filter(Boolean).join(' / ') || v.sku || '—';
+                                return (
+                                  <button
+                                    key={`${v.sku || ''}-${v.size || ''}-${v.color || ''}`}
+                                    onClick={() => addProductToEdit(p, v)}
+                                    className="w-full text-left px-5 py-1.5 rounded-xl hover:bg-card text-xs transition-colors flex items-center justify-between gap-2 ms-2"
+                                  >
+                                    <span className="text-foreground">{label}</span>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      {v.price_usd && <span className="text-muted-foreground">${Number(v.price_usd).toFixed(2)}</span>}
+                                      {isAdded && <span className="text-green-600 font-medium">Added ✓</span>}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
 
                 {/* Live totals preview */}
                 <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 space-y-1 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">New subtotal</span><span>${editSubtotal.toFixed(2)}</span></div>
-                  {order.discount_usd > 0 && <div className="flex justify-between text-green-700"><span>Discount (kept)</span><span>-${Number(order.discount_usd).toFixed(2)}</span></div>}
+                  <div className="flex justify-between"><span className="text-muted-foreground">New subtotal</span><span>${editTotals.subtotal.toFixed(2)}</span></div>
+                  {editTotals.orderDiscount > 0 && <div className="flex justify-between text-green-700"><span>Discount (kept)</span><span>-${Number(editTotals.orderDiscount).toFixed(2)}</span></div>}
                   <div className="flex justify-between"><span className="text-muted-foreground">Delivery (kept)</span><span>${Number(order.delivery_fee_usd || 0).toFixed(2)}</span></div>
                   <div className="flex justify-between font-bold border-t border-border pt-1.5">
                     <span>New total</span>
-                    <span className="text-primary">${editGrand.toFixed(2)}
-                      {Math.abs(editGrand - Number(order.grand_total_usd || 0)) > 0.001 && (
+                    <span className="text-primary">${editTotals.grandTotal.toFixed(2)}
+                      {Math.abs(editTotals.grandTotal - Number(order.grand_total_usd || 0)) > 0.001 && (
                         <span className="text-xs font-normal text-muted-foreground"> (was ${Number(order.grand_total_usd || 0).toFixed(2)})</span>
                       )}
                     </span>
                   </div>
-                  {order.payment_method === 'Cash on Delivery' && Math.abs(editGrand - Number(order.grand_total_usd || 0)) > 0.001 && (
-                    <p className="text-xs text-amber-700 pt-1">💵 COD: tell the courier the new amount is ${editGrand.toFixed(2)}.</p>
+                  {order.payment_method === 'Cash on Delivery' && Math.abs(editTotals.grandTotal - Number(order.grand_total_usd || 0)) > 0.001 && (
+                    <p className="text-xs text-amber-700 pt-1">💵 COD: tell the courier the new amount is ${editTotals.grandTotal.toFixed(2)}.</p>
                   )}
                 </div>
 
                 {editErr && <p className="text-xs text-destructive">{editErr}</p>}
                 {editShortages.length > 0 && (
                   <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-3 space-y-1">
-                    <p className="text-xs font-semibold text-destructive">Not enough stock — the order was NOT changed:</p>
+                    <p className="text-xs font-semibold text-destructive">Stock could not be reserved for the updated items:</p>
                     {editShortages.map((sh, i) => (
                       <p key={i} className="text-xs text-destructive">• {sh.name}: {sh.available} available, {sh.needed} needed{sh.reason ? ` (${sh.reason})` : ''}</p>
                     ))}
@@ -456,14 +586,13 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
                 <div className="flex gap-2">
                   <button onClick={saveEdit} disabled={editSaving}
                     className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50 hover:bg-primary/90">
-                    {editSaving ? 'Saving…' : 'Save Changes'}
+                    {editSaving ? <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Saving…</span> : 'Save Changes'}
                   </button>
-                  <button onClick={() => setEditing(false)} disabled={editSaving}
+                  <button onClick={() => { setEditing(false); setShowPicker(false); setExpandedProductId(null); setProductSearch(''); }} disabled={editSaving}
                     className="px-4 py-2 rounded-xl border border-border text-sm font-medium hover:bg-muted">
                     Discard
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground">Stock updates automatically: freed items go back on sale, new items are taken out of stock — all-or-nothing.</p>
               </div>
             )}
           </div>
