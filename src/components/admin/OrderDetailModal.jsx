@@ -586,6 +586,6 @@ function buildPrintHTML(order, items) {
 }
 
 function buildWhatsAppMsg(order, items) {
-  const itemLines = items.map(i => `• ${i.product_name}${i.size ? ` (${i.size}` : ''}${i.color ? `/${i.color})` : i.size ? ')' : ''} x${i.quantity} — $${(i.line_total_usd || i.unit_price_usd * i.quantity).toFixed(2)}`).join('\n');
-  return `*AURA Order Confirmation*\nOrder: ${order.order_number}\n\n${itemLines}\n\nDelivery: $${(order.delivery_fee_usd || 0).toFixed(2)}\n*Total: $${(order.grand_total_usd || 0).toFixed(2)}*\n\nDeliver to: ${[order.building, order.street, order.district, order.city].filter(Boolean).join(', ')}\nPhone: ${order.customer_phone}\n${order.payment_method === 'Cash on Delivery' ? `\n💵 Please have $${(order.grand_total_usd || 0).toFixed(2)} ready for the driver.` : ''}`;
+  const customerName = order.customer_name || 'dear customer';
+  return `Hello dear ${customerName} 🙂\n\nThis is Amir from AURA, just checking in to make sure your order arrived safely and everything is perfect on your end.\n\nWe'd love to hear what you think once you try our Apparel wear, your feedback really means a lot to us! 💬\n\nThank you again for choosing Aura.Wear`;
 }
