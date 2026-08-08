@@ -179,16 +179,32 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
       }
 
       // Hold inventory immediately for manual orders too, so they can't oversell
-      // against storefront orders. A shortage cancels the order server-side.
-      const reservation = await reserveOrderStock(order.id);
+      // against storefront orders. On shortage the order is KEPT (no_cancel) and
+      // flagged needs_review — never silently cancelled out from under the admin.
+      let reservation = null;
+      let reserveShortages = [];
+      try {
+        reservation = await reserveOrderStock(order.id, { noCancel: true });
+      } catch (e) {
+        reserveShortages = e?.data?.data?.shortages || e?.data?.shortages || [];
+      }
       if (!reservation?.ok) {
-        const names = (reservation?.shortages || []).map(s => s.name).filter(Boolean).join(', ');
-        setError(
-          names
-            ? t(`Insufficient stock: ${names}`, `مخزون غير كافٍ: ${names}`)
-            : t('Insufficient stock to reserve this order.', 'المخزون غير كافٍ لحجز هذا الطلب.')
-        );
-        setSaving(false);
+        const names = reserveShortages.map(s => s.name).filter(Boolean).join(', ');
+        await base44.entities.Order.update(order.id, {
+          needs_review: true,
+          import_errors: names
+            ? `Insufficient stock to reserve: ${names} — adjust items or stock, then Edit Items to retry.`
+            : 'Insufficient stock to reserve this order — adjust items or stock, then Edit Items to retry.',
+        });
+        await base44.entities.OrderStatusHistory.create({
+          order_id: order.id,
+          status: 'New',
+          note: 'Order created manually (needs review — stock not reserved)',
+          changed_by: currentUser?.email || 'admin',
+          changed_at: new Date().toISOString(),
+        });
+        await logAction({ action: 'created', entity: 'Order', entityId: order.id, details: `${order_number} (needs review: stock shortage)`, userName: currentUser?.email });
+        onSaved();
         return;
       }
 

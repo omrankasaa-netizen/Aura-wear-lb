@@ -132,7 +132,7 @@ const clampNonNeg = (n) => (n < 0 ? 0 : n);
 // the check→write critical section below never interleaves with another
 // request; wrapping it in db.transaction() additionally makes the multi-line
 // reservation all-or-nothing (BEGIN/COMMIT, ROLLBACK on throw).
-function reserveStock({ order_id }, user) {
+function reserveStock({ order_id, no_cancel }, user) {
   const o = queryRecords('Order', { query: { id: order_id }, limit: 1 })[0];
   if (!o) return { _status: 404, error: 'Order not found' };
   if (o.stock_reserved) return { ok: true, message: 'Stock already reserved' };
@@ -213,8 +213,11 @@ function reserveStock({ order_id }, user) {
   if (!result.ok) {
     // Nothing was held (all-or-nothing). Cancel the just-placed order so it does
     // not linger as a phantom that holds no stock; the client can't set order
-    // status itself (generic Order writes are create-only for guests).
-    if (o.order_status !== 'Cancelled') {
+    // status itself (generic Order writes are create-only for guests). Admin
+    // flows (manual order entry) pass no_cancel — honored for admins only —
+    // they keep the order and flag it needs_review instead of losing it.
+    const isAdmin = user && (user.role === 'admin' || user.role === 'super_admin');
+    if (!(no_cancel && isAdmin) && o.order_status !== 'Cancelled') {
       updateRecord('Order', order_id, { order_status: 'Cancelled', stock_reserved: false });
     }
     return { _status: 409, ok: false, shortages: result.shortages };
@@ -228,7 +231,7 @@ function reserveStock({ order_id }, user) {
 // that were never reserved (no stock_reserved flag), falls back to the old
 // behaviour of decrementing qty_on_hand only, guarded by a fresh availability
 // check so historical orders can't oversell or go negative.
-function commitStock({ order_id }, user) {
+function commitStock({ order_id, force }, user) {
   const o = queryRecords('Order', { query: { id: order_id }, limit: 1 })[0];
   if (!o) return { _status: 404, error: 'Order not found' };
   if (o.stock_committed) return { ok: true, message: 'Stock already committed' };
@@ -236,8 +239,10 @@ function commitStock({ order_id }, user) {
   const wasReserved = !!o.stock_reserved;
   // Legacy orders were never reserved — verify availability before deducting.
   // Reserved orders already hold their stock, so a check here would wrongly see
-  // their own reservation as unavailable; skip it.
-  if (!wasReserved) {
+  // their own reservation as unavailable; skip it. An admin with `force` (the
+  // modal's "Confirm anyway") skips the check too: deduction clamps at zero
+  // and the movements keep an audit trail of the shortfall.
+  if (!wasReserved && !force) {
     const check = checkStock({ order_id });
     if (!check.ok) return { _status: 409, ok: false, shortages: check.shortages };
   }

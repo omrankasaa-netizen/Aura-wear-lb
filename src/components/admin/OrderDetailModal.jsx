@@ -41,6 +41,7 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
   const [editDelivery, setEditDelivery] = useState('0');
   const [editTotalOverridden, setEditTotalOverridden] = useState(false);
   const [editTotalInput, setEditTotalInput] = useState('0.00');
+  const [confirmShortages, setConfirmShortages] = useState([]);
 
   const { data: items = [] } = useQuery({
     queryKey: ['order-items', order.id],
@@ -245,13 +246,14 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
   const currentIdx = STATUS_FLOW.indexOf(order.order_status);
   const nextStatus = currentIdx >= 0 && currentIdx < STATUS_FLOW.length - 1 ? STATUS_FLOW[currentIdx + 1] : null;
 
-  async function changeStatus(newStatus) {
+  async function changeStatus(newStatus, { force = false } = {}) {
     setUpdating(true);
     setErr('');
+    setConfirmShortages([]);
     try {
       // Inventory logic
       if (newStatus === 'Confirmed' && !order.stock_committed) {
-        await commitStock({ orderId: order.id, items });
+        await commitStock({ orderId: order.id, force });
       }
       // Cancellation is the only path that frees stock — release whether the
       // order is merely reserved (placed, not yet confirmed) or already
@@ -293,7 +295,14 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
       await logAction({ action: 'status_changed', entity: 'Order', entityId: order.id, details: `→ ${newStatus}`, userName: currentUser?.email });
       onUpdated({ ...order, order_status: newStatus, stock_committed: newStatus === 'Confirmed' || newStatus === 'Delivered' ? true : (newStatus === 'Cancelled' ? false : order.stock_committed) });
     } catch (e) {
-      setErr(e.message);
+      // Stock shortage on confirm: offer "Confirm anyway" instead of a dead
+      // end. The order stays New until the admin explicitly chooses.
+      const shortages = e?.data?.data?.shortages || e?.data?.shortages;
+      if (newStatus === 'Confirmed' && !force && Array.isArray(shortages) && shortages.length > 0) {
+        setConfirmShortages(shortages);
+      } else {
+        setErr(e.message);
+      }
     } finally {
       setUpdating(false);
     }
@@ -387,6 +396,25 @@ export default function OrderDetailModal({ order, onClose, onUpdated, currentUse
               )}
             </div>
             {err && <p className="text-xs text-destructive mt-2">{err}</p>}
+            {confirmShortages.length > 0 && (
+              <div className="mt-2 bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                <p className="text-xs font-semibold text-amber-800">Not enough stock to deduct for this order:</p>
+                {confirmShortages.map((sh, i) => (
+                  <p key={i} className="text-xs text-amber-800">• {sh.name}: {Math.max(0, Number(sh.available) || 0)} available, {sh.needed} needed</p>
+                ))}
+                <div className="flex items-center gap-2 pt-1">
+                  <button onClick={() => changeStatus('Confirmed', { force: true })} disabled={updating}
+                    className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 disabled:opacity-50">
+                    {updating ? 'Working…' : 'Confirm anyway'}
+                  </button>
+                  <button onClick={() => setConfirmShortages([])} disabled={updating}
+                    className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-800 text-xs font-medium hover:bg-amber-100 disabled:opacity-50">
+                    Keep as New
+                  </button>
+                </div>
+                <p className="text-[11px] text-amber-700">Stock will be deducted down to zero and the shortfall stays visible in Inventory movements.</p>
+              </div>
+            )}
           </div>
 
           {/* Items */}

@@ -355,6 +355,10 @@ export default function ProductsPage() {
             qc.invalidateQueries({ queryKey: ['admin-product-images'] });
             qc.invalidateQueries({ queryKey: ['form-variants'] });
             qc.invalidateQueries({ queryKey: ['form-images'] });
+            // Keep the Inventory view in sync: with the global 60s staleTime a
+            // removed variant would otherwise "remain" listed there after save.
+            qc.invalidateQueries({ queryKey: ['inventory-products'] });
+            qc.invalidateQueries({ queryKey: ['inventory-variants'] });
             setShowForm(false);
             setEditProduct(null);
             setCloneSourceId(null);
