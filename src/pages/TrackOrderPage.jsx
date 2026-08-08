@@ -98,7 +98,7 @@ export default function TrackOrderPage() {
           <div>
             <label className="text-xs text-muted-foreground block mb-1">{t('Order Number', 'رقم الطلب')}</label>
             <input required value={orderNum} onChange={e => setOrderNum(e.target.value)}
-              placeholder="MNY-XXXXX"
+              placeholder="AURA-XXXXX"
               className="w-full px-3 py-2.5 rounded-xl border border-input bg-background text-sm uppercase" />
           </div>
           <div>
