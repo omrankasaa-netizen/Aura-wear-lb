@@ -85,6 +85,11 @@ export default function Footer() {
 
         <div className="border-t border-white/10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-white/40">© {new Date().getFullYear()} {BRAND.name}. {t('All rights reserved.', 'جميع الحقوق محفوظة.')}</p>
+          <a href="https://ops-shift.com" target="_blank" rel="noopener"
+            className="text-xs text-white/40 hover:text-white/70 transition-colors order-last sm:order-none">
+            {t('Developed for', 'طُوِّر لصالح')} {BRAND.name} {t('by', 'من')}{' '}
+            <span className="font-semibold tracking-tight text-white/60">OPS<span className="text-[#00d4c8] font-light">/</span>SHFT</span>
+          </a>
           <div className="flex items-center gap-4">
             <Link to="/legal/privacy" className="text-xs text-white/40 hover:text-white/70">{t('Privacy', 'الخصوصية')}</Link>
             <Link to="/legal/terms" className="text-xs text-white/40 hover:text-white/70">{t('Terms', 'الشروط')}</Link>
