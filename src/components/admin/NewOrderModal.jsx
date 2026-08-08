@@ -56,6 +56,51 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
     variantsByProduct[v.product_id].push(v);
   }
 
+  // ── Stock awareness ─────────────────────────────────────────────────────────
+  // Available = on_hand minus reserved (same math as the inventory engine).
+  // `claimed` subtracts quantities already in THIS order so re-adding the same
+  // variant greys out once the order would exceed what's on the shelf.
+  const availByVariantKey = {};
+  for (const v of variants) {
+    availByVariantKey[`${v.product_id}|${v.size || ''}|${v.color || ''}`] =
+      (v.qty_on_hand || 0) - (v.qty_reserved || 0);
+  }
+  const claimedByKey = {};
+  for (const it of items) {
+    const k = `${it.product_id}|${it.size || ''}|${it.color || ''}`;
+    claimedByKey[k] = (claimedByKey[k] || 0) + (Number(it.quantity) || 0);
+  }
+  // Remaining for a variant combo (or a no-variant product when size/color are
+  // both ''), optionally ignoring one order line (the one being edited).
+  function remainingFor(productId, size = '', color = '', excludeItemId = null) {
+    const pvs = variantsByProduct[productId] || [];
+    let base;
+    if (pvs.length > 0) {
+      base = availByVariantKey[`${productId}|${size}|${color}`];
+      if (base == null) return 0; // combo doesn't exist as a variant row
+    } else {
+      const p = products.find(x => x.id === productId);
+      if (!p) return 0;
+      base = (p.stock_quantity || 0) - (p.qty_reserved || 0);
+    }
+    const k = `${productId}|${size}|${color}`;
+    let claimed = claimedByKey[k] || 0;
+    if (excludeItemId) {
+      const own = items.find(i => i._id === excludeItemId);
+      if (own && `${own.product_id}|${own.size || ''}|${own.color || ''}` === k) {
+        claimed -= Number(own.quantity) || 0;
+      }
+    }
+    return base - claimed;
+  }
+  // Total remaining across a product's variants (for the collapsed row label).
+  function productRemainingTotal(p) {
+    const pvs = variantsByProduct[p.id] || [];
+    if (!pvs.length) return remainingFor(p.id);
+    return pvs.reduce((s, v) => s + Math.max(0, remainingFor(p.id, v.size || '', v.color || '')), 0);
+  }
+  function outOfStockLabel() { return t('Out of stock', 'نفد المخزون'); }
+
   // Live totals — reuses the same math (and stored fields) as persistence.
   const totals = computeOrderTotals({
     items,
@@ -79,8 +124,17 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
     const effective = Number(getDiscountedPrice ? getDiscountedPrice(product) : original) || original;
     const discount = getProductDiscount ? getProductDiscount(product) : null;
 
-    const size = variant ? (variant.size || '') : (pvs.length > 0 ? pvs[0].size || '' : '');
-    const color = variant ? (variant.color || '') : (pvs.length > 0 ? pvs[0].color || '' : '');
+    // When no specific variant was clicked, default to the first one that still
+    // has stock instead of blindly taking the first row.
+    if (!variant && pvs.length > 0) {
+      variant = pvs.find(v => remainingFor(product.id, v.size || '', v.color || '') > 0) || pvs[0];
+    }
+    const size = variant ? (variant.size || '') : '';
+    const color = variant ? (variant.color || '') : '';
+
+    // Refuse to add something that isn't on the shelf — the picker greys these
+    // out, but guard here too so a stale click can't sneak one in.
+    if (remainingFor(product.id, size, color) <= 0) return;
     const unitPrice = variant?.price_usd ? Number(variant.price_usd) : effective;
     const sku = variant?.sku || product.sku || '';
 
@@ -357,16 +411,25 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
                     const pvs = variantsByProduct[p.id] || [];
                     const isExpanded = expandedProductId === p.id;
                     const noVariantKey = `${p.id}||`;
+                    // For a no-variant product, grey the row itself; for variant
+                    // products, stay clickable but show the badge when EVERY
+                    // variant is gone (rows inside are individually greyed).
+                    const productOut = productRemainingTotal(p) <= 0;
+                    const rowDisabled = !pvs.length && productOut;
                     return (
                       <div key={p.id}>
-                        <button onClick={() => handlePickerProductClick(p)}
-                          className="w-full text-left px-3 py-2 rounded-xl hover:bg-card text-sm transition-colors flex items-center justify-between gap-2">
+                        <button onClick={() => !rowDisabled && handlePickerProductClick(p)}
+                          disabled={rowDisabled}
+                          className={`w-full text-left px-3 py-2 rounded-xl text-sm transition-colors flex items-center justify-between gap-2 ${rowDisabled ? 'opacity-45 cursor-not-allowed' : 'hover:bg-card'}`}>
                           <div className="min-w-0 flex-1">
                             <span className="font-medium text-foreground">{p.name}</span>
                             <span className="text-muted-foreground ms-2">${p.price_usd?.toFixed(2)}</span>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {!pvs.length && addedKey === noVariantKey && (
+                            {productOut && (
+                              <span className="text-[11px] font-medium text-muted-foreground bg-muted border border-border rounded-full px-2 py-0.5">{outOfStockLabel()}</span>
+                            )}
+                            {!pvs.length && !productOut && addedKey === noVariantKey && (
                               <span className="text-xs text-green-600 font-medium">Added ✓</span>
                             )}
                             {pvs.length > 0 && (
@@ -378,14 +441,22 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
                           const vKey = `${p.id}|${v.size || ''}|${v.color || ''}`;
                           const isAdded = addedKey === vKey;
                           const label = [v.size, v.color].filter(Boolean).join(' / ') || v.sku || '—';
+                          const remaining = remainingFor(p.id, v.size || '', v.color || '');
+                          const variantOut = remaining <= 0;
                           return (
                             <button key={`${v.sku || ''}-${v.size || ''}-${v.color || ''}`}
-                              onClick={() => addProductToOrder(p, v)}
-                              className="w-full text-left px-5 py-1.5 rounded-xl hover:bg-card text-xs transition-colors flex items-center justify-between gap-2 ms-2">
-                              <span className="text-foreground">{label}</span>
+                              onClick={() => !variantOut && addProductToOrder(p, v)}
+                              disabled={variantOut}
+                              className={`w-full text-left px-5 py-1.5 rounded-xl text-xs transition-colors flex items-center justify-between gap-2 ms-2 ${variantOut ? 'opacity-45 cursor-not-allowed' : 'hover:bg-card'}`}>
+                              <span className={variantOut ? 'text-muted-foreground line-through' : 'text-foreground'}>{label}</span>
                               <div className="flex items-center gap-2 shrink-0">
+                                {variantOut ? (
+                                  <span className="text-[11px] font-medium text-muted-foreground bg-muted border border-border rounded-full px-2 py-0.5">{outOfStockLabel()}</span>
+                                ) : (
+                                  <span className="text-[11px] text-muted-foreground">{t('{n} in stock', '{n} بالمخزون').replace('{n}', remaining)}</span>
+                                )}
                                 {v.price_usd && <span className="text-muted-foreground">${Number(v.price_usd).toFixed(2)}</span>}
-                                {isAdded && <span className="text-green-600 font-medium">Added ✓</span>}
+                                {isAdded && !variantOut && <span className="text-green-600 font-medium">Added ✓</span>}
                               </div>
                             </button>
                           );
@@ -407,13 +478,19 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
                       {item.availableSizes.length > 0 && (
                         <select value={item.size} onChange={e => updateItem(item._id, 'size', e.target.value)}
                           className="px-2 py-1 rounded-lg border border-input bg-background text-xs">
-                          {item.availableSizes.map(s => <option key={s}>{s}</option>)}
+                          {item.availableSizes.map(s => {
+                            const out = s !== item.size && remainingFor(item.product_id, s, item.color || '', item._id) <= 0;
+                            return <option key={s} value={s} disabled={out}>{s}{out ? ` (${outOfStockLabel()})` : ''}</option>;
+                          })}
                         </select>
                       )}
                       {item.availableColors.length > 0 && (
                         <select value={item.color} onChange={e => updateItem(item._id, 'color', e.target.value)}
                           className="px-2 py-1 rounded-lg border border-input bg-background text-xs">
-                          {item.availableColors.map(c => <option key={c}>{c}</option>)}
+                          {item.availableColors.map(c => {
+                            const out = c !== item.color && remainingFor(item.product_id, item.size || '', c, item._id) <= 0;
+                            return <option key={c} value={c} disabled={out}>{c}{out ? ` (${outOfStockLabel()})` : ''}</option>;
+                          })}
                         </select>
                       )}
                       {/* Per-item unit price override */}
