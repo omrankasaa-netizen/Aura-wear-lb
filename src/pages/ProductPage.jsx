@@ -77,14 +77,18 @@ export default function ProductPage() {
     queryKey: ['product-images', product?.id],
     queryFn: () => base44.entities.ProductImage.filter({ product_id: product.id }, 'sort_order', 20),
     enabled: !!product?.id,
-    initialData: preload?.product?.id === product?.id ? preload.images : undefined,
+    // Guard against undefined === undefined: with no preload (client-side
+    // navigation) and the product query still loading, both ids are undefined
+    // and a naive `preload?.product?.id === product?.id` is TRUE — then
+    // `preload.images` dereferences null and the page crashes until refresh.
+    initialData: preload && product && preload.product.id === product.id ? preload.images : undefined,
   });
 
   const { data: variants = [] } = useQuery({
     queryKey: ['product-variants', product?.id],
     queryFn: () => base44.entities.ProductVariant.filter({ product_id: product.id }, 'size', 50),
     enabled: !!product?.id && product?.has_variants,
-    initialData: preload?.product?.id === product?.id ? preload.variants : undefined,
+    initialData: preload && product && preload.product.id === product.id ? preload.variants : undefined,
   });
 
   const { data: reviews = [] } = useQuery({
