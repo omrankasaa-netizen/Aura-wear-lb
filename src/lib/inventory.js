@@ -15,8 +15,12 @@ export async function checkOrderStock(orderId) {
 }
 
 /** Reserve (hold) stock the moment an order is placed, before admin confirmation. */
-export async function reserveOrderStock(orderId) {
-  const res = await base44.functions.invoke('inventoryEngine', { action: 'reserve_stock', order_id: orderId });
+export async function reserveOrderStock(orderId, { noCancel = false } = {}) {
+  const res = await base44.functions.invoke('inventoryEngine', {
+    action: 'reserve_stock',
+    order_id: orderId,
+    ...(noCancel ? { no_cancel: true } : {}),
+  });
   return res.data;
 }
 
@@ -64,8 +68,12 @@ export async function manualStockAdjust({ productId, variantSku, newQty, movemen
 }
 
 /** Commit stock when order is confirmed */
-export async function commitStock({ orderId }) {
-  const res = await base44.functions.invoke('inventoryEngine', { action: 'commit_stock', order_id: orderId });
+export async function commitStock({ orderId, force = false }) {
+  const res = await base44.functions.invoke('inventoryEngine', {
+    action: 'commit_stock',
+    order_id: orderId,
+    ...(force ? { force: true } : {}),
+  });
   return res.data;
 }
 
