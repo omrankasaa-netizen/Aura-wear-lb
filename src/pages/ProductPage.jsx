@@ -97,6 +97,19 @@ export default function ProductPage() {
     enabled: !!product?.id,
   });
 
+  // If the chosen size isn't available in the newly picked color, clear it so
+  // the shopper re-picks instead of hitting a dead "out of stock" CTA. This
+  // hook MUST live before the `if (!product)` early return below — after it,
+  // React sees a changing hook count between the loading and loaded renders
+  // and crashes the page on client-side navigation.
+  useEffect(() => {
+    if (!selectedSize || !product?.has_variants || variants.length === 0) return;
+    const ok = variants.some(
+      vv => vv.size === selectedSize && (!selectedColor || vv.color === selectedColor) && availableQty(vv) > 0,
+    );
+    if (!ok) setSelectedSize(null);
+  }, [selectedColor, variants, selectedSize, product?.has_variants]);
+
   // When the shopper picks a color, jump the gallery to the first photo linked
   // to that color (admins set the link per image in the product editor).
   // Declared before the early return below to keep hook order stable.
@@ -163,13 +176,6 @@ export default function ProductPage() {
     return variants.some(vv => vv.color === c && (!selectedSize || vv.size === selectedSize) && availableQty(vv) > 0);
   }
   const displayImages = images.length > 0 ? images : [];
-
-  // If the chosen size isn't available in the newly picked color, clear it so
-  // the shopper re-picks instead of hitting a dead "out of stock" CTA.
-  useEffect(() => {
-    if (selectedSize && !sizeAvailable(selectedSize)) setSelectedSize(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedColor, variants]);
 
   const selectedVariant = product.has_variants && variants.length > 0
     ? variants.find(v => (!selectedSize || v.size === selectedSize) && (!selectedColor || v.color === selectedColor))
