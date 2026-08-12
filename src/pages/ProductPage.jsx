@@ -86,7 +86,7 @@ export default function ProductPage() {
 
   const { data: variants = [] } = useQuery({
     queryKey: ['product-variants', product?.id],
-    queryFn: () => base44.entities.ProductVariant.filter({ product_id: product.id }, 'size', 50),
+    queryFn: () => base44.entities.ProductVariant.filter({ product_id: product.id }, 'size', 500),
     enabled: !!product?.id && product?.has_variants,
     initialData: preload && product && preload.product.id === product.id ? preload.variants : undefined,
   });
@@ -144,7 +144,32 @@ export default function ProductPage() {
   const sizes = product.sizes
     ? product.sizes.split('|').map(s => s.trim()).filter(Boolean)
     : [...new Set(variants.map(v => v.size).filter(Boolean))];
+
+  // Per-option availability, so shoppers see what's actually purchasable
+  // BEFORE hitting the add-to-cart blocker. An option counts as available when
+  // AT LEAST ONE variant row matching it (and the other selection, if any) has
+  // stock. When variant rows exist, a picker option with NO matching in-stock
+  // row is unavailable — the old code only greyed a size when its first
+  // matching row had zero stock, so missing rows and wrong-color rows both
+  // looked purchasable. While variant rows are still loading (or a legacy
+  // variant product has none), fall back to permissive rendering.
+  const variantsKnown = product.has_variants && variants.length > 0;
+  function sizeAvailable(s) {
+    if (!variantsKnown) return true;
+    return variants.some(vv => vv.size === s && (!selectedColor || vv.color === selectedColor) && availableQty(vv) > 0);
+  }
+  function colorAvailable(c) {
+    if (!variantsKnown) return true;
+    return variants.some(vv => vv.color === c && (!selectedSize || vv.size === selectedSize) && availableQty(vv) > 0);
+  }
   const displayImages = images.length > 0 ? images : [];
+
+  // If the chosen size isn't available in the newly picked color, clear it so
+  // the shopper re-picks instead of hitting a dead "out of stock" CTA.
+  useEffect(() => {
+    if (selectedSize && !sizeAvailable(selectedSize)) setSelectedSize(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedColor, variants]);
 
   const selectedVariant = product.has_variants && variants.length > 0
     ? variants.find(v => (!selectedSize || v.size === selectedSize) && (!selectedColor || v.color === selectedColor))
@@ -261,12 +286,19 @@ export default function ProductPage() {
               <div className="mt-6">
                 <p className="text-sm mb-2.5">{t('Color', 'اللون')}{selectedColor && <span className="text-muted-foreground"> — {selectedColor}</span>}</p>
                 <div className="flex flex-wrap gap-2">
-                  {colors.map(c => (
-                    <button key={c} onClick={() => setSelectedColor(c)} title={c}
-                      className={`px-3 py-1.5 rounded-sm text-sm border transition-colors ${selectedColor === c ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:border-foreground'}`}>
-                      {c}
-                    </button>
-                  ))}
+                  {colors.map(c => {
+                    const oos = !colorAvailable(c);
+                    // OOS colors stay clickable (shoppers may still want to see
+                    // that color's photos) but are visually marked so nobody
+                    // mistakes them for purchasable.
+                    return (
+                      <button key={c} onClick={() => setSelectedColor(c)}
+                        title={oos ? `${c} — ${t('Out of stock', 'نفذ المخزون')}` : c}
+                        className={`px-3 py-1.5 rounded-sm text-sm border transition-colors ${oos ? 'border-border text-muted-foreground line-through opacity-50' : selectedColor === c ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:border-foreground'}`}>
+                        {c}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -280,8 +312,7 @@ export default function ProductPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {sizes.map(s => {
-                    const v = variants.find(vv => vv.size === s && (!selectedColor || vv.color === selectedColor));
-                    const outOfStock = product.has_variants && v && availableQty(v) <= 0;
+                    const outOfStock = !sizeAvailable(s);
                     return (
                       <button key={s} onClick={() => !outOfStock && setSelectedSize(s)} disabled={outOfStock}
                         className={`min-w-12 h-12 px-3 rounded-sm border text-sm font-display transition-colors
