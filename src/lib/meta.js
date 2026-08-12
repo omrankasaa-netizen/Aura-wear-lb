@@ -58,8 +58,13 @@ function injectPixel() {
   })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
   /* eslint-enable */
 
-  // Revoke first so nothing is sent before the shopper opts in.
-  window.fbq('consent', 'revoke');
+  // Consent is GRANTED before init, never revoked-first: injectPixel only runs
+  // after the shopper opts in (initMetaPixel/grantConsent both gate on it), and
+  // the current fbevents.js drops a pixel init that arrives while consent is
+  // revoked — with revoke-first the pixel never initializes at all and every
+  // event is silently swallowed (verified live: getState().pixels stayed []).
+  // denyConsent() still revokes on the live pixel when the shopper declines.
+  window.fbq('consent', 'grant');
   window.fbq('init', PIXEL_ID);
 }
 
