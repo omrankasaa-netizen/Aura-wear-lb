@@ -35,8 +35,21 @@ export function CartProvider({ children }) {
     return variant ? `${product.id}_${variant.id}` : String(product.id);
   }
 
+  // UX clamp: on-hand minus reserved from the freshest product/variant copy we
+  // hold. Checkout revalidation + server reserve remain the hard gate; this
+  // stops shoppers bagging unlimited units of a low-stock item.
+  function maxAddable(product, variant) {
+    const source = variant || product;
+    if (!source) return 0;
+    const onHand = Number(source.qty_on_hand ?? source.stock_quantity ?? 0);
+    const reserved = Number(source.qty_reserved ?? 0);
+    return Math.max(0, onHand - reserved);
+  }
+
   function addItem(product, variant, qty = 1) {
     const key = getKey(product, variant);
+    const max = maxAddable(product, variant);
+    if (max <= 0) return;
     const addPrice = parseFloat(variant?.price_usd || product.price_usd || 0);
     trackAddToCart(product, qty, addPrice);
     ttAddToCart(product, qty, addPrice);
@@ -44,10 +57,10 @@ export function CartProvider({ children }) {
     setItems(prev => {
       const existing = prev.find(i => i.key === key);
       if (existing) {
-        return prev.map(i => i.key === key ? { ...i, quantity: i.quantity + qty } : i);
+        return prev.map(i => i.key === key ? { ...i, quantity: Math.min(max, i.quantity + qty) } : i);
       }
       const price = parseFloat(variant?.price_usd || product.price_usd || 0);
-      return [...prev, { key, product, variant, quantity: qty, price }];
+      return [...prev, { key, product, variant, quantity: Math.min(max, qty), price }];
     });
   }
 
@@ -57,7 +70,12 @@ export function CartProvider({ children }) {
 
   function updateQty(key, quantity) {
     if (quantity <= 0) { removeItem(key); return; }
-    setItems(prev => prev.map(i => i.key === key ? { ...i, quantity } : i));
+    setItems(prev => prev.map(i => {
+      if (i.key !== key) return i;
+      const max = maxAddable(i.product, i.variant);
+      if (max <= 0) return i;
+      return { ...i, quantity: Math.min(max, quantity) };
+    }));
   }
 
   function clearCart() { setItems([]); }

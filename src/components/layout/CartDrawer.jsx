@@ -3,7 +3,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useLang } from '@/contexts/LanguageContext';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { base44 } from '@/api/base44Client';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { X, Minus, Plus, ShoppingBag, MessageCircle, Tag } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { BRAND, whatsappLink } from '@/lib/brand';
@@ -81,18 +81,20 @@ export default function CartDrawer() {
     return imgs.find(i => i.is_primary)?.url || imgs[0]?.url || null;
   };
 
+  const navigate = useNavigate();
+
   const handleAddRecommendation = (product) => {
+    // Variant products must be configured on the PDP — adding here without a
+    // size/color lets a shopper check out a variant they never chose.
+    if (product.has_variants) {
+      setIsOpen(false);
+      navigate(`/product/${product.slug}`);
+      return;
+    }
     setJustAdded(product.id);
-    addItem(
-      {
-        id: product.id, name: product.name, name_ar: product.name_ar,
-        price_usd: product.price_usd, compare_at_price_usd: product.compare_at_price_usd,
-        image_url: product.image_url, sku: product.sku, primaryImage: getPrimaryImage(product.id),
-        category_id: product.category_id, has_variants: product.has_variants,
-      },
-      null,
-      1,
-    );
+    // Full product (with stock fields) so the cart context's availability
+    // clamp can see on-hand/reserved — the old trimmed copy hid them.
+    addItem({ ...product, primaryImage: getPrimaryImage(product.id) }, null, 1);
     setTimeout(() => setJustAdded(null), 1500);
   };
 
