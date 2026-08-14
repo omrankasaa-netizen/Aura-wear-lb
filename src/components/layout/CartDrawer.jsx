@@ -180,7 +180,7 @@ export default function CartDrawer() {
                         <p className="text-xs font-medium line-clamp-1">{name}</p>
                         <p className="text-xs font-semibold tabular-nums mb-1.5">${(parseFloat(product.price_usd) || 0).toFixed(2)}</p>
                         {product.has_variants ? (
-                          <Link to={`/product/${product.slug}`} onClick={() => setIsOpen(false)} className="block text-center w-full text-[11px] uppercase tracking-wide font-display py-1.5 border border-primary hover:bg-primary hover:text-primary-foreground transition-colors rounded-sm">{t('Choose', 'اختاري')}</Link>
+                          <a href={`/product/${product.slug}`} className="block text-center w-full text-[11px] uppercase tracking-wide font-display py-1.5 border border-primary hover:bg-primary hover:text-primary-foreground transition-colors rounded-sm">{t('Choose', 'اختاري')}</a>
                         ) : (
                           <button onClick={() => handleAddRecommendation(product)} className="w-full text-[11px] uppercase tracking-wide font-display py-1.5 border border-primary hover:bg-primary hover:text-primary-foreground transition-colors rounded-sm">{t('Add', 'أضف')}</button>
                         )}
