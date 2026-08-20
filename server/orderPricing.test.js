@@ -39,6 +39,37 @@ test('effectiveUnitPrice uses variant price as the base when provided', () => {
   assert.equal(effectiveUnitPrice(product, discounts, { price_usd: 50 }), 45); // 50 - 10%
 });
 
+// ── size-scoped discounts ──────────────────────────────────────────────────────
+
+test('effectiveUnitPrice applies a size-scoped fixed discount only to the covered size', () => {
+  const product = { id: 'p1', price_usd: 40 };
+  const discounts = [{ is_active: true, applies_to: 'all_products', type: 'fixed_amount', value: 10, sizes: 'XXL' }];
+  assert.equal(effectiveUnitPrice(product, discounts, { price_usd: 42, size: 'XXL' }), 32); // 42 - 10
+  assert.equal(effectiveUnitPrice(product, discounts, { price_usd: 40, size: 'M' }), 40); // not covered
+});
+
+test('effectiveUnitPrice: size-scoped discount still matches at product level (no size chosen yet)', () => {
+  const product = { id: 'p1', price_usd: 40 };
+  const discounts = [{ is_active: true, applies_to: 'all_products', type: 'fixed_amount', value: 10, sizes: 'XXL' }];
+  // Product cards / badges advertise the sale before a size is selected.
+  assert.equal(effectiveUnitPrice(product, discounts), 30);
+});
+
+test('effectiveUnitPrice: size matching is case-insensitive and trims spaces', () => {
+  const product = { id: 'p1', price_usd: 40 };
+  const discounts = [{ is_active: true, applies_to: 'all_products', type: 'fixed_amount', value: 5, sizes: 'xl, xxl' }];
+  assert.equal(effectiveUnitPrice(product, discounts, { size: 'XL' }), 35);
+  assert.equal(effectiveUnitPrice(product, discounts, { size: ' xxl ' }), 35);
+  assert.equal(effectiveUnitPrice(product, discounts, { size: 'L' }), 40);
+});
+
+test('effectiveUnitPrice: percentage discounts can also be size-scoped', () => {
+  const product = { id: 'p1', price_usd: 40 };
+  const discounts = [{ is_active: true, applies_to: 'all_products', type: 'percentage', value: 50, sizes: 'S' }];
+  assert.equal(effectiveUnitPrice(product, discounts, { size: 'S' }), 20);
+  assert.equal(effectiveUnitPrice(product, discounts, { size: 'M' }), 40);
+});
+
 // ── subtotal from (possibly overridden) line prices ────────────────────────────
 
 test('calcSubtotal sums unit_price * qty across items', () => {

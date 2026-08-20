@@ -34,6 +34,10 @@
       "type": "string",
       "description": "Category ID / Collection ID / product IDs (comma-sep) / tag name based on applies_to"
     },
+    "sizes": {
+      "type": "string",
+      "description": "Optional comma-separated sizes this discount applies to (e.g. XL,XXL). Empty = all sizes. The restriction bites once a size is chosen (cart/checkout); product-level displays still advertise the sale."
+    },
     "starts_at": {
       "type": "string",
       "format": "date-time"
