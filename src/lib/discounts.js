@@ -80,6 +80,9 @@ function discountMatchesProduct(d, product) {
 function calcSaving(discount, price) {
   if (discount.type === 'percentage') return (price * discount.value) / 100;
   if (discount.type === 'fixed_amount') return discount.value;
+  // fixed_price: saving is whatever brings the price down to the flat value
+  // (0 when the flat value isn't actually cheaper).
+  if (discount.type === 'fixed_price') return Math.max(price - discount.value, 0);
   return 0;
 }
 
@@ -91,6 +94,11 @@ export function applyDiscountToPrice(discount, price) {
   }
   if (discount.type === 'fixed_amount') {
     return Math.max(price - discount.value, 0.01);
+  }
+  // fixed_price: the final price becomes exactly `value` (flat price) — never
+  // above the original price (a "discount" must not raise it) and never < 0.01.
+  if (discount.type === 'fixed_price') {
+    return Math.max(Math.min(discount.value, price), 0.01);
   }
   return price;
 }
