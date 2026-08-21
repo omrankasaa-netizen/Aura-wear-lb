@@ -10,6 +10,7 @@ import WishlistHeart from '@/components/storefront/WishlistHeart';
 import { ReviewList, ReviewForm } from '@/components/storefront/ReviewCard';
 import { BRAND, whatsappLink } from '@/lib/brand';
 import { availableQty } from '@/lib/inventory';
+import { getDiscountSizes } from '@/lib/discounts';
 import { imageSrc, handleImageError } from '@/lib/imageFraming';
 import ImageLightbox from '@/components/storefront/ImageLightbox';
 import { trackViewContent } from '@/lib/meta';
@@ -139,8 +140,12 @@ export default function ProductPage() {
   const name = lang === 'ar' ? (product.name_ar || product.name) : product.name;
   const desc = lang === 'ar' ? (product.description_ar || product.description) : product.description;
   const hasCompareDiscount = product.compare_at_price_usd > product.price_usd;
-  const autoDiscount = getProductDiscount(product);
-  const discountedPrice = autoDiscount ? getDiscountedPrice(product) : null;
+  // Size-aware: once the shopper picks a size, size-scoped discounts (e.g.
+  // "$5 off XXL") only apply if they cover that size; before a size is picked
+  // they still show, so the sale is advertised on the page.
+  const autoDiscount = getProductDiscount(product, selectedSize || null);
+  const discountedPrice = autoDiscount ? getDiscountedPrice(product, selectedSize || null) : null;
+  const discountSizes = autoDiscount ? getDiscountSizes(autoDiscount) : [];
   const hasDiscount = hasCompareDiscount || !!autoDiscount;
   const displayPrice = discountedPrice ?? product.price_usd;
   const originalPrice = discountedPrice ? product.price_usd : (hasCompareDiscount ? product.compare_at_price_usd : null);
@@ -286,6 +291,11 @@ export default function ProductPage() {
               {originalPrice && <span className="text-muted-foreground line-through text-lg">${originalPrice?.toFixed(2)}</span>}
               {badgeLabel && <span className="bg-sale text-white text-xs font-display font-semibold px-2.5 py-1 rounded-sm">{badgeLabel}</span>}
             </div>
+            {discountSizes.length > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t('On selected sizes:', 'على مقاسات محددة:')} {discountSizes.join(', ')}
+              </p>
+            )}
 
             {/* Color picker */}
             {colors.length > 0 && (

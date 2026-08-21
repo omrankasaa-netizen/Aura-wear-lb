@@ -14,10 +14,12 @@ export function round2(n) {
 /**
  * Effective per-unit price for a product, mirroring the storefront/cart badge:
  * base price (variant overrides product) with the best live auto-discount applied.
+ * The variant's size is passed along so size-scoped discounts (e.g. "$5 off XXL")
+ * only apply when the ordered size is actually covered.
  */
 export function effectiveUnitPrice(product, discounts = [], variant = null) {
   const base = Number(variant?.price_usd ?? product?.price_usd) || 0;
-  const discount = getBestDiscount(discounts || [], { ...product, price_usd: base });
+  const discount = getBestDiscount(discounts || [], { ...product, price_usd: base }, variant?.size || null);
   return round2(discount ? applyDiscountToPrice(discount, base) : base);
 }
 

@@ -83,10 +83,13 @@ export function CartProvider({ children }) {
   // Resolve auto-discounts live so the cart never freezes a stale add-time price.
   // Variant price (stored as `price`) is the BASE; the auto-discount applies on top,
   // using the same logic the storefront badge uses so badge price == cart price.
+  // The item's size is passed along so size-scoped discounts (e.g. "$5 off XXL")
+  // only discount the sizes they cover — this is what wires them into the cart
+  // subtotal, the checkout order summary, and the saved OrderItem unit price.
   const { getProductDiscount } = useDiscounts();
   const pricedItems = items.map(item => {
     const rawPrice = parseFloat(item.price ?? item.variant?.price_usd ?? item.product?.price_usd ?? 0) || 0;
-    const discount = getProductDiscount ? getProductDiscount(item.product) : null;
+    const discount = getProductDiscount ? getProductDiscount(item.product, item.variant?.size || null) : null;
     const price = discount ? applyDiscountToPrice(discount, rawPrice) : rawPrice;
     return { ...item, rawPrice, price, discount };
   });

@@ -2,6 +2,10 @@
  * Shared discount resolution logic used by storefront and checkout.
  * discounts: array of Discount records from DB
  * product: a Product record
+ * size (optional): the selected variant size. Discounts can be scoped to
+ * specific sizes (e.g. "$5 off XXL only") via the comma-separated `sizes`
+ * field — the restriction is enforced wherever a real size is known
+ * (product page selection, cart, checkout, manual orders).
  * cartItems (optional): for promo code scope checks
  */
 
@@ -21,10 +25,30 @@ export function isCampaignLive(c) {
   return true;
 }
 
+/** Normalized list of sizes a discount is scoped to (empty = all sizes). */
+export function getDiscountSizes(d) {
+  return (d?.sizes || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * True when the discount covers the given size.
+ * A null/empty size means "product-level context" (no size chosen yet, e.g.
+ * product cards and badges) — size-scoped discounts still match there so the
+ * sale is advertised; cart/checkout always pass the real size, which is where
+ * the restriction actually bites.
+ */
+export function discountMatchesSize(d, size) {
+  const sizes = getDiscountSizes(d);
+  if (!sizes.length) return true;
+  if (size == null || size === '') return true;
+  const norm = String(size).trim().toLowerCase();
+  return sizes.some(s => s.toLowerCase() === norm);
+}
+
 /** Returns the best matching auto-discount for a product (or null). */
-export function getBestDiscount(discounts, product) {
+export function getBestDiscount(discounts, product, size = null) {
   const live = discounts.filter(isDiscountLive);
-  const matching = live.filter(d => discountMatchesProduct(d, product));
+  const matching = live.filter(d => discountMatchesProduct(d, product) && discountMatchesSize(d, size));
   if (!matching.length) return null;
   // Pick largest saving
   return matching.reduce((best, d) => {

@@ -21,12 +21,14 @@ export function DiscountProvider({ children }) {
   const liveDiscounts = discounts.filter(isDiscountLive);
   const liveCampaigns = campaigns.filter(isCampaignLive);
 
-  function getProductDiscount(product) {
-    return getBestDiscount(liveDiscounts, product);
+  // `size` is optional — pass the selected variant size so size-scoped
+  // discounts (e.g. "$5 off XXL") only resolve for the sizes they cover.
+  function getProductDiscount(product, size = null) {
+    return getBestDiscount(liveDiscounts, product, size);
   }
 
-  function getDiscountedPrice(product) {
-    const d = getProductDiscount(product);
+  function getDiscountedPrice(product, size = null) {
+    const d = getProductDiscount(product, size);
     if (!d) return product.price_usd;
     return applyDiscountToPrice(d, product.price_usd);
   }

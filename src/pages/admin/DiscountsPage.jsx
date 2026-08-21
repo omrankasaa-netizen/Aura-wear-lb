@@ -8,7 +8,7 @@ import AccessDenied from './AccessDenied';
 import { Plus, Pencil, Trash2, Percent, ToggleLeft, ToggleRight, Zap } from 'lucide-react';
 import { isDiscountLive } from '@/lib/discounts';
 
-const EMPTY = { name: '', name_ar: '', type: 'percentage', value: '', applies_to: 'all_products', target: '', starts_at: '', ends_at: '', is_active: true, badge_label: 'SALE', badge_label_ar: 'تخفيض' };
+const EMPTY = { name: '', name_ar: '', type: 'percentage', value: '', applies_to: 'all_products', target: '', sizes: '', starts_at: '', ends_at: '', is_active: true, badge_label: 'SALE', badge_label_ar: 'تخفيض' };
 
 // datetime-local <-> ISO conversion. The <input type="datetime-local"> value is
 // a local-time string (YYYY-MM-DDTHH:mm); we persist UTC ISO. Slicing a UTC ISO
@@ -107,6 +107,13 @@ function DiscountModal({ initial, onClose, onSave }) {
               <input value={form.target||''} onChange={e=>f('target',e.target.value)} className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm" />
             </div>
           )}
+          <div className="col-span-2">
+            <label className="text-xs text-muted-foreground mb-1 block">Limit to Sizes (optional)</label>
+            <input value={form.sizes||''} onChange={e=>f('sizes',e.target.value)} placeholder="e.g. XL, XXL — leave empty for all sizes" className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm" />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              The discount only applies when the customer buys one of these sizes (matched against the product's own sizes). Handy for fixed-$ markdowns on slow-moving sizes.
+            </p>
+          </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Starts At</label>
             <input type="datetime-local" value={isoToDatetimeLocal(form.starts_at)} onChange={e=>f('starts_at',datetimeLocalToIso(e.target.value))} className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm" />
@@ -153,7 +160,12 @@ export default function DiscountsPage() {
   // modal closes itself only after this resolves.
   async function handleSave(form) {
     const id = form.id || form._id;
-    const data = { ...form, value: Number(form.value) || 0 };
+    const data = {
+      ...form,
+      value: Number(form.value) || 0,
+      // Normalize the size list: trimmed, no empties, comma-separated.
+      sizes: (form.sizes || '').split(',').map(s => s.trim()).filter(Boolean).join(','),
+    };
     if (id) {
       await base44.entities.Discount.update(id, data);
       await logAction({ action: 'updated', entity: 'Discount', entity_id: id, details: form.name, userName: currentUser?.email });
@@ -246,6 +258,7 @@ export default function DiscountsPage() {
                       <td className="px-4 py-3 hidden sm:table-cell text-xs text-muted-foreground capitalize">
                         {d.applies_to?.replace(/_/g,' ')}
                         {d.target && <span className="ml-1 text-foreground font-medium">({d.target.slice(0,20)})</span>}
+                        {d.sizes && <span className="block mt-0.5 normal-case text-foreground font-medium">Sizes: {d.sizes}</span>}
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell text-xs text-muted-foreground">
                         {d.starts_at ? new Date(d.starts_at).toLocaleDateString() : '—'}

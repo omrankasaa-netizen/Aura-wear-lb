@@ -5,6 +5,7 @@ import { X, Plus, Trash2, Loader2 } from 'lucide-react';
 import { logAction } from '@/lib/auditLog';
 import { useLang } from '@/contexts/LanguageContext';
 import { useDiscounts } from '@/contexts/DiscountContext';
+import { applyDiscountToPrice } from '@/lib/discounts';
 import { computeOrderTotals } from '@/lib/orderPricing';
 import { reserveOrderStock } from '@/lib/inventory';
 
@@ -20,7 +21,7 @@ function generateOrderNumber() {
 
 export default function NewOrderModal({ onClose, onSaved, currentUser }) {
   const { t, isRTL } = useLang();
-  const { getProductDiscount, getDiscountedPrice } = useDiscounts();
+  const { getProductDiscount } = useDiscounts();
 
   const [form, setForm] = useState({
     customer_name: '', customer_phone: '',
@@ -118,11 +119,6 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
 
   function addProductToOrder(product, variant = null) {
     const pvs = variantsByProduct[product.id] || [];
-    // Default to the storefront's effective (discounted) price so manual orders
-    // don't over-charge / over-report revenue. Admin can still override below.
-    const original = Number(product.price_usd) || 0;
-    const effective = Number(getDiscountedPrice ? getDiscountedPrice(product) : original) || original;
-    const discount = getProductDiscount ? getProductDiscount(product) : null;
 
     // When no specific variant was clicked, default to the first one that still
     // has stock instead of blindly taking the first row.
@@ -135,7 +131,14 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
     // Refuse to add something that isn't on the shelf — the picker greys these
     // out, but guard here too so a stale click can't sneak one in.
     if (remainingFor(product.id, size, color) <= 0) return;
-    const unitPrice = variant?.price_usd ? Number(variant.price_usd) : effective;
+
+    // Default to the storefront's effective (discounted) price so manual orders
+    // don't over-charge / over-report revenue. Admin can still override below.
+    // Base = variant price override when present; the size-aware auto-discount
+    // applies on top, matching the storefront cart math exactly.
+    const base = variant?.price_usd ? Number(variant.price_usd) : (Number(product.price_usd) || 0);
+    const discount = getProductDiscount ? getProductDiscount(product, size || null) : null;
+    const unitPrice = discount ? applyDiscountToPrice(discount, base) : base;
     const sku = variant?.sku || product.sku || '';
 
     const newItem = {
@@ -146,8 +149,8 @@ export default function NewOrderModal({ onClose, onSaved, currentUser }) {
       size,
       color,
       unit_price_usd: unitPrice,
-      original_price_usd: original,
-      auto_discounted: !!discount && effective < original,
+      original_price_usd: base,
+      auto_discounted: !!discount && unitPrice < base,
       quantity: 1,
       availableSizes: pvs.length > 0 ? [...new Set(pvs.map(v => v.size).filter(Boolean))] : [],
       availableColors: pvs.length > 0 ? [...new Set(pvs.map(v => v.color).filter(Boolean))] : [],
