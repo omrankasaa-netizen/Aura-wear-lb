@@ -74,12 +74,16 @@ function DiscountModal({ initial, onClose, onSave }) {
             <label className="text-xs text-muted-foreground mb-1 block">Type</label>
             <select value={form.type} onChange={e=>f('type',e.target.value)} className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm">
               <option value="percentage">Percentage %</option>
-              <option value="fixed_amount">Fixed Amount $</option>
+              <option value="fixed_amount">Fixed Amount $ off</option>
+              <option value="fixed_price">Fixed Price $ (flat)</option>
             </select>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Value {form.type==='percentage'?'(%)':'($)'} *</label>
+            <label className="text-xs text-muted-foreground mb-1 block">Value {form.type==='percentage'?'(%)':form.type==='fixed_price'?'($ flat price)':'($ off)'} *</label>
             <input type="number" value={form.value||''} onChange={e=>f('value',e.target.value)} className="w-full px-3 py-2 rounded-xl border border-input bg-background text-sm" />
+            {form.type === 'fixed_price' && (
+              <p className="text-[11px] text-muted-foreground mt-1">Final price becomes exactly ${form.value || 'X'} — e.g. every XL sells at a flat $15, whatever its original price.</p>
+            )}
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Badge Label (EN)</label>
@@ -253,7 +257,7 @@ export default function DiscountsPage() {
                         {d.name_ar && <p className="text-xs text-muted-foreground" dir="rtl">{d.name_ar}</p>}
                       </td>
                       <td className="px-4 py-3 font-bold text-primary">
-                        {d.type === 'percentage' ? `${d.value}% OFF` : `-$${d.value}`}
+                        {d.type === 'percentage' ? `${d.value}% OFF` : d.type === 'fixed_price' ? `→ $${d.value} flat` : `-$${d.value}`}
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell text-xs text-muted-foreground capitalize">
                         {d.applies_to?.replace(/_/g,' ')}

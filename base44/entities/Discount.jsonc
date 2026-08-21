@@ -12,7 +12,8 @@
       "type": "string",
       "enum": [
         "percentage",
-        "fixed_amount"
+        "fixed_amount",
+        "fixed_price"
       ],
       "default": "percentage"
     },

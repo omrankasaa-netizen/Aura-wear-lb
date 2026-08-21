@@ -23,6 +23,36 @@ test('effectiveUnitPrice applies a live fixed_amount discount', () => {
   assert.equal(effectiveUnitPrice(product, discounts), 30);
 });
 
+// ── fixed_price: flat final price ─────────────────────────────────────────────
+
+test('effectiveUnitPrice applies a fixed_price discount as a flat final price', () => {
+  const product = { id: 'p1', price_usd: 40 };
+  const discounts = [{ is_active: true, applies_to: 'all_products', type: 'fixed_price', value: 15 }];
+  assert.equal(effectiveUnitPrice(product, discounts), 15); // 40 → flat 15
+});
+
+test('effectiveUnitPrice: fixed_price never raises the price above the original', () => {
+  const product = { id: 'p1', price_usd: 12 };
+  const discounts = [{ is_active: true, applies_to: 'all_products', type: 'fixed_price', value: 15 }];
+  assert.equal(effectiveUnitPrice(product, discounts), 12); // flat 15 would be a markup — clamped
+});
+
+test('effectiveUnitPrice: fixed_price works on a variant base price and with size scoping', () => {
+  const product = { id: 'p1', price_usd: 40 };
+  const discounts = [{ is_active: true, applies_to: 'all_products', type: 'fixed_price', value: 15, sizes: 'XL' }];
+  assert.equal(effectiveUnitPrice(product, discounts, { price_usd: 42, size: 'XL' }), 15); // XL → flat 15
+  assert.equal(effectiveUnitPrice(product, discounts, { price_usd: 40, size: 'M' }), 40); // M not covered
+});
+
+test('getBestDiscount prefers the bigger saving across mixed types', () => {
+  const product = { id: 'p1', price_usd: 40 };
+  const discounts = [
+    { is_active: true, applies_to: 'all_products', type: 'percentage', value: 10 }, // saves 4
+    { is_active: true, applies_to: 'all_products', type: 'fixed_price', value: 15 }, // saves 25
+  ];
+  assert.equal(effectiveUnitPrice(product, discounts), 15);
+});
+
 test('effectiveUnitPrice ignores inactive/expired discounts', () => {
   const product = { id: 'p1', price_usd: 40 };
   const past = new Date(Date.now() - 86400000).toISOString();
