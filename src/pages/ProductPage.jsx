@@ -65,7 +65,7 @@ export default function ProductPage() {
   const [sizeHelpOpen, setSizeHelpOpen] = useState(false);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
-  const { getProductDiscount, getDiscountedPrice } = useDiscounts();
+  const { getProductDiscount, getDiscountedPrice, getProductDiscountAnySize } = useDiscounts();
 
   const { data: products = [] } = useQuery({
     queryKey: ['product', slug],
@@ -140,12 +140,16 @@ export default function ProductPage() {
   const name = lang === 'ar' ? (product.name_ar || product.name) : product.name;
   const desc = lang === 'ar' ? (product.description_ar || product.description) : product.description;
   const hasCompareDiscount = product.compare_at_price_usd > product.price_usd;
-  // Size-aware: once the shopper picks a size, size-scoped discounts (e.g.
-  // "$5 off XXL") only apply if they cover that size; before a size is picked
-  // they still show, so the sale is advertised on the page.
+  // Size-aware: size-scoped discounts (e.g. "flat $15 on XL") only apply once
+  // the shopper picks a covered size. Before that (and on cards) the real base
+  // price is shown — a size-scoped sale must never rewrite the headline price
+  // of sizes it doesn't cover. A size-agnostic lookup still lets us hint that
+  // a sale exists on select sizes.
   const autoDiscount = getProductDiscount(product, selectedSize || null);
   const discountedPrice = autoDiscount ? getDiscountedPrice(product, selectedSize || null) : null;
   const discountSizes = autoDiscount ? getDiscountSizes(autoDiscount) : [];
+  const sizeScopedTeaser = !autoDiscount ? getProductDiscountAnySize(product) : null;
+  const teaserSizes = sizeScopedTeaser ? getDiscountSizes(sizeScopedTeaser) : [];
   const hasDiscount = hasCompareDiscount || !!autoDiscount;
   const displayPrice = discountedPrice ?? product.price_usd;
   const originalPrice = discountedPrice ? product.price_usd : (hasCompareDiscount ? product.compare_at_price_usd : null);
@@ -294,6 +298,11 @@ export default function ProductPage() {
             {discountSizes.length > 0 && (
               <p className="mt-1 text-xs text-muted-foreground">
                 {t('On selected sizes:', 'على مقاسات محددة:')} {discountSizes.join(', ')}
+              </p>
+            )}
+            {teaserSizes.length > 0 && !selectedSize && (
+              <p className="mt-1 text-xs text-sale font-medium">
+                {t(`Sale on ${teaserSizes.join(', ')} — select a size to see the price`, `تخفيض على مقاس ${teaserSizes.join('، ')} — اختر المقاس لترى السعر`)}
               </p>
             )}
 

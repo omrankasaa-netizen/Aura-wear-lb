@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useLang } from '@/contexts/LanguageContext';
 import { useDiscounts } from '@/contexts/DiscountContext';
+import { applyDiscountToPrice } from '@/lib/discounts';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import ProductCard from '@/components/storefront/ProductCard';
@@ -54,7 +55,7 @@ function FilterSection({ title, children }) {
 
 export default function ShopPage() {
   const { t, lang } = useLang();
-  const { liveDiscounts, getDiscountedPrice } = useDiscounts();
+  const { liveDiscounts, getDiscountedPrice, getProductDiscountAnySize } = useDiscounts();
   const { get, getArr, set, clear } = useUrlFilters();
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
@@ -136,7 +137,13 @@ export default function ShopPage() {
 
   function isOnSale(p) {
     if (p.compare_at_price_usd && p.compare_at_price_usd > p.price_usd) return true;
-    return getDiscountedPrice(p) < p.price_usd;
+    if (getDiscountedPrice(p) < p.price_usd) return true;
+    // Size-scoped sales (e.g. "flat $15 on XL") no longer discount the card
+    // price, but the product still belongs in the Sale filter — detect them
+    // with the size-agnostic lookup and confirm the discount actually lowers
+    // the base price (a flat price above the base isn't a saving).
+    const anySize = getProductDiscountAnySize ? getProductDiscountAnySize(p) : null;
+    return !!anySize && applyDiscountToPrice(anySize, p.price_usd) < p.price_usd;
   }
 
   const filtered = useMemo(() => {
