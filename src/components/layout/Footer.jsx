@@ -3,11 +3,13 @@ import { useLang } from '@/contexts/LanguageContext';
 import { MessageCircle, Instagram, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
-import { LOGO, BRAND, COLLECTIONS, whatsappLink } from '@/lib/brand';
+import { useNavCategories } from '@/hooks/useNavCategories';
+import { LOGO, BRAND, whatsappLink } from '@/lib/brand';
 
 export default function Footer() {
   const { t } = useLang();
   const settings = useSiteSettings();
+  const navCategories = useNavCategories();
   const [email, setEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
 
@@ -50,7 +52,7 @@ export default function Footer() {
             </div>
           </div>
 
-          {col(t('Shop', 'تسوّق'), COLLECTIONS.map((c) => fLink(`/shop?category=${c.slug}`, t(c.label, c.label))))}
+          {col(t('Shop', 'تسوّق'), navCategories.map((c) => fLink(`/shop?category=${c.slug}`, c.label)))}
 
           {col(t('Help', 'المساعدة'), [
             fLink('/faq', t('FAQ', 'الأسئلة الشائعة')),
