@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   effectiveUnitPrice, calcSubtotal, calcOrderDiscount, calcAutoTotal, computeOrderTotals,
 } from '../src/lib/orderPricing.js';
+import { getBestDiscount, getBestDiscountAnySize } from '../src/lib/discounts.js';
 
 // ── effectiveUnitPrice: mirrors storefront auto-discounts ──────────────────────
 
@@ -78,11 +79,35 @@ test('effectiveUnitPrice applies a size-scoped fixed discount only to the covere
   assert.equal(effectiveUnitPrice(product, discounts, { price_usd: 40, size: 'M' }), 40); // not covered
 });
 
-test('effectiveUnitPrice: size-scoped discount still matches at product level (no size chosen yet)', () => {
+test('effectiveUnitPrice: size-scoped discount does NOT apply when no size is known', () => {
   const product = { id: 'p1', price_usd: 40 };
   const discounts = [{ is_active: true, applies_to: 'all_products', type: 'fixed_amount', value: 10, sizes: 'XXL' }];
-  // Product cards / badges advertise the sale before a size is selected.
-  assert.equal(effectiveUnitPrice(product, discounts), 30);
+  // Product cards / grids show the real base price — a size-scoped sale must
+  // never make the whole product look discounted before a size is chosen.
+  assert.equal(effectiveUnitPrice(product, discounts), 40);
+});
+
+test('effectiveUnitPrice: flat fixed_price on XL never leaks onto the product card price', () => {
+  const product = { id: 'p1', price_usd: 40 };
+  const discounts = [{ is_active: true, applies_to: 'all_products', type: 'fixed_price', value: 15, sizes: 'XL' }];
+  // Card/grid context (no size): base price, not the $15 flat XL price.
+  assert.equal(effectiveUnitPrice(product, discounts), 40);
+  // Size known: only the covered size gets the flat price.
+  assert.equal(effectiveUnitPrice(product, discounts, { price_usd: 42, size: 'XL' }), 15);
+  assert.equal(effectiveUnitPrice(product, discounts, { price_usd: 40, size: 'M' }), 40);
+});
+
+test('getBestDiscountAnySize finds size-scoped sales for advertising contexts', () => {
+  const product = { id: 'p1', price_usd: 40 };
+  const scoped = [{ is_active: true, applies_to: 'all_products', type: 'fixed_price', value: 15, sizes: 'XL' }];
+  // Ignores size scoping so Sale filters / hints can surface the product…
+  assert.equal(getBestDiscountAnySize(scoped, product)?.value, 15);
+  // …while the size-aware lookup correctly refuses to quote a price for it.
+  assert.equal(getBestDiscount(scoped, product), null);
+  assert.equal(getBestDiscount(scoped, product, 'M'), null);
+  assert.equal(getBestDiscount(scoped, product, 'XL')?.value, 15);
+  // No discount at all → null from both.
+  assert.equal(getBestDiscountAnySize([], product), null);
 });
 
 test('effectiveUnitPrice: size matching is case-insensitive and trims spaces', () => {

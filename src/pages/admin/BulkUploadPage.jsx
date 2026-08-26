@@ -200,6 +200,12 @@ export default function BulkUploadPage() {
         }
       }
       qc.invalidateQueries({ queryKey: ['bulk-categories'] });
+      // Categories created inline must surface everywhere immediately —
+      // the admin Categories page and the storefront shop filters use
+      // different query keys.
+      qc.invalidateQueries({ queryKey: ['admin-categories-full'] });
+      qc.invalidateQueries({ queryKey: ['admin-categories'] });
+      qc.invalidateQueries({ queryKey: ['categories'] });
 
       const validRows = rows.filter((_, i) => !skipped.has(i) && !errors[i]);
 

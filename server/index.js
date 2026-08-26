@@ -354,8 +354,9 @@ function sanitize(entity, record) {
 // ── Catalog cache headers ────────────────────────────────────────────────────
 // Sets public cache headers on GET requests for read-only catalog entities.
 // Cloudflare / CDN will cache these at the edge (max-age=60s, SWR=300s).
-// All other routes (auth, orders, customers, carts, admin, mutations) keep
-// whatever cache behavior they already have (no-store).
+// Admin reads bypass the cache entirely (no-store) so panel edits show up
+// immediately; public cached responses Vary on Cookie/Authorization so the
+// anonymous snapshot is never served to a signed-in session.
 const CATALOG_CACHE_ENTITIES = new Set([
   'CmsSection', 'SiteSetting', 'Category', 'Product', 'ProductImage',
   'ProductVariant', 'Collection', 'Review', 'Discount', 'Campaign',
@@ -364,16 +365,22 @@ app.use('/api/entities/:entity', (req, res, next) => {
   if (req.method === 'GET') {
     const user = getUserFromRequest(req);
     const isAdminRead = !!user && ['admin', 'super_admin', 'staff'].includes(user.role);
-    // Admin reads for mutable settings must bypass caches so admin saves are
-    // visible immediately after write.
-    if (isAdminRead && (req.params.entity === 'SiteSetting' || req.params.entity === 'ShippingZone')) {
+    // Admin reads ALWAYS bypass caches so admin saves are visible immediately
+    // after write. This used to cover only SiteSetting/ShippingZone — every
+    // other admin-mutable entity (Category, Product, Discount, …) could serve
+    // a stale public snapshot for minutes after a save, which presented as
+    // "my new category didn't persist".
+    if (isAdminRead) {
       res.set('Cache-Control', 'no-store');
       res.set('Vary', 'Cookie');
       return next();
     }
     // Keep fast public cache behavior for unauthenticated storefront catalog reads.
+    // Vary on Cookie + Authorization so shared caches (Cloudflare) and browsers
+    // never serve the anonymous snapshot to a signed-in session, or vice versa.
     if (!user && CATALOG_CACHE_ENTITIES.has(req.params.entity)) {
       res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+      res.set('Vary', 'Cookie, Authorization');
     }
   }
   next();

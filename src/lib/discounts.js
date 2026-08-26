@@ -3,9 +3,14 @@
  * discounts: array of Discount records from DB
  * product: a Product record
  * size (optional): the selected variant size. Discounts can be scoped to
- * specific sizes (e.g. "$5 off XXL only") via the comma-separated `sizes`
- * field — the restriction is enforced wherever a real size is known
- * (product page selection, cart, checkout, manual orders).
+ * specific sizes (e.g. "$5 off XXL only" or "flat $15 on XL") via the
+ * comma-separated `sizes` field — a size-scoped discount applies ONLY where a
+ * real size is known (product page selection, cart, checkout, manual orders).
+ * Where no size is chosen yet (product cards, grids), size-scoped discounts
+ * deliberately do NOT discount the displayed price: a flat "$15 on XL" must
+ * not make the whole product look like it costs $15. Use
+ * getBestDiscountAnySize() for advertising-only contexts (e.g. a Sale filter)
+ * that need to know a size-scoped sale exists without quoting a price.
  * cartItems (optional): for promo code scope checks
  */
 
@@ -32,15 +37,15 @@ export function getDiscountSizes(d) {
 
 /**
  * True when the discount covers the given size.
- * A null/empty size means "product-level context" (no size chosen yet, e.g.
- * product cards and badges) — size-scoped discounts still match there so the
- * sale is advertised; cart/checkout always pass the real size, which is where
- * the restriction actually bites.
+ * A null/empty size means "no size chosen" (product cards, grids, PDP before
+ * selection) — size-scoped discounts do NOT match there, so a sale on XL can
+ * never rewrite the price of every size on a product card. Cart, checkout and
+ * manual orders always pass the real size, which is where the discount bites.
  */
 export function discountMatchesSize(d, size) {
   const sizes = getDiscountSizes(d);
   if (!sizes.length) return true;
-  if (size == null || size === '') return true;
+  if (size == null || size === '') return false;
   const norm = String(size).trim().toLowerCase();
   return sizes.some(s => s.toLowerCase() === norm);
 }
@@ -51,6 +56,23 @@ export function getBestDiscount(discounts, product, size = null) {
   const matching = live.filter(d => discountMatchesProduct(d, product) && discountMatchesSize(d, size));
   if (!matching.length) return null;
   // Pick largest saving
+  return matching.reduce((best, d) => {
+    const saving = calcSaving(d, product.price_usd);
+    const bestSaving = best ? calcSaving(best, product.price_usd) : -1;
+    return saving > bestSaving ? d : best;
+  }, null);
+}
+
+/**
+ * Advertising-only lookup: the best live discount for a product IGNORING size
+ * scoping. Use where you need to know a sale exists (e.g. the shop's Sale
+ * filter or a "sale on select sizes" hint) but must not quote a price, since
+ * the discounted price may only be valid for specific sizes.
+ */
+export function getBestDiscountAnySize(discounts, product) {
+  const live = discounts.filter(isDiscountLive);
+  const matching = live.filter(d => discountMatchesProduct(d, product));
+  if (!matching.length) return null;
   return matching.reduce((best, d) => {
     const saving = calcSaving(d, product.price_usd);
     const bestSaving = best ? calcSaving(best, product.price_usd) : -1;

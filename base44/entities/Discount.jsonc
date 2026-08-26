@@ -37,7 +37,7 @@
     },
     "sizes": {
       "type": "string",
-      "description": "Optional comma-separated sizes this discount applies to (e.g. XL,XXL). Empty = all sizes. The restriction bites once a size is chosen (cart/checkout); product-level displays still advertise the sale."
+      "description": "Optional comma-separated sizes this discount applies to (e.g. XL,XXL). Empty = all sizes. Size-scoped discounts apply only once a size is chosen (PDP selection, cart, checkout, manual orders); product cards and grids keep showing the real base price so a sale on XL never makes every size look discounted."
     },
     "starts_at": {
       "type": "string",
