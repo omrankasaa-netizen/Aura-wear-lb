@@ -272,12 +272,16 @@ export default function CategoriesPage() {
     await base44.entities.Category.update(cat.id, { is_active: !cat.is_active });
     await logAction({ action: 'updated', entity: 'Category', entityId: cat.id, userName: currentUser?.email });
     qc.invalidateQueries({ queryKey: ['admin-categories-full'] });
+    qc.invalidateQueries({ queryKey: ['categories'] });
+    qc.invalidateQueries({ queryKey: ['categories-active'] });
   }
 
   async function doDelete(id) {
     await base44.entities.Category.delete(id);
     await logAction({ action: 'deleted', entity: 'Category', entityId: id, userName: currentUser?.email });
     qc.invalidateQueries({ queryKey: ['admin-categories-full'] });
+    qc.invalidateQueries({ queryKey: ['categories'] });
+    qc.invalidateQueries({ queryKey: ['categories-active'] });
     setConfirmDelete(null);
   }
 
@@ -385,6 +389,8 @@ export default function CategoriesPage() {
           onSaved={() => {
             qc.invalidateQueries({ queryKey: ['admin-categories-full'] });
             qc.invalidateQueries({ queryKey: ['categories'] });
+            // Storefront header/footer nav + homepage tiles share this key.
+            qc.invalidateQueries({ queryKey: ['categories-active'] });
             setShowForm(false);
             setEditCat(null);
           }}
@@ -397,6 +403,7 @@ export default function CategoriesPage() {
           onApplied={() => {
             qc.invalidateQueries({ queryKey: ['admin-categories-full'] });
             qc.invalidateQueries({ queryKey: ['categories'] });
+            qc.invalidateQueries({ queryKey: ['categories-active'] });
             qc.invalidateQueries({ queryKey: ['admin-products-count'] });
             setShowCleanup(false);
           }}
