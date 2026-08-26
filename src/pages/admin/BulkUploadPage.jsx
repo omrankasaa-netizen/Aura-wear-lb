@@ -206,6 +206,8 @@ export default function BulkUploadPage() {
       qc.invalidateQueries({ queryKey: ['admin-categories-full'] });
       qc.invalidateQueries({ queryKey: ['admin-categories'] });
       qc.invalidateQueries({ queryKey: ['categories'] });
+      // Storefront nav + homepage tiles share this key.
+      qc.invalidateQueries({ queryKey: ['categories-active'] });
 
       const validRows = rows.filter((_, i) => !skipped.has(i) && !errors[i]);
 

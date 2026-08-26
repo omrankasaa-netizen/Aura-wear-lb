@@ -7,7 +7,8 @@ import { useWishlist } from '@/contexts/WishlistContext';
 import { Link, useLocation } from 'react-router-dom';
 import { ShoppingBag, Heart, User, Menu, X, Search, ChevronRight } from 'lucide-react';
 import { useCustomerTier } from '@/hooks/useCustomerTier';
-import { LOGO, COLLECTIONS } from '@/lib/brand';
+import { useNavCategories } from '@/hooks/useNavCategories';
+import { LOGO } from '@/lib/brand';
 
 export default function Header() {
   const { lang, toggleLang, t } = useLang();
@@ -21,6 +22,9 @@ export default function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [scrolled, setScrolled] = useState(false);
+  // Live admin-managed categories (sort_order from the panel), so a category
+  // created in admin shows up here on desktop AND in the mobile drawer.
+  const navCategories = useNavCategories();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -62,9 +66,9 @@ export default function Header() {
             <Menu className="w-5 h-5" strokeWidth={1.5} />
           </button>
 
-          {/* Desktop nav (left) */}
+          {/* Desktop nav (left) — first few live categories by sort_order */}
           <nav className="hidden lg:flex items-center gap-6 flex-1">
-            {COLLECTIONS.slice(0, 5).map((c) => (
+            {navCategories.slice(0, 5).map((c) => (
               <Link key={c.slug} to={`/shop?category=${c.slug}`}
                 className="eyebrow text-foreground/80 hover:text-foreground transition-colors">
                 {c.label}
@@ -143,7 +147,7 @@ export default function Header() {
             </div>
             <div className="flex-1 overflow-y-auto py-2">
               <p className="eyebrow text-muted-foreground px-4 pt-4 pb-2">{t('Shop', 'تسوّق')}</p>
-              {COLLECTIONS.map((c) => (
+              {navCategories.map((c) => (
                 <Link key={c.slug} to={`/shop?category=${c.slug}`}
                   className="flex items-center justify-between px-4 py-3.5 font-display text-sm uppercase tracking-wide border-b border-border/50 hover:bg-secondary/40">
                   {c.label}

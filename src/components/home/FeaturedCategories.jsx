@@ -11,7 +11,7 @@ export default function FeaturedCategories() {
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories-active'],
-    queryFn: () => base44.entities.Category.filter({ is_active: true }, 'sort_order', 20),
+    queryFn: () => base44.entities.Category.filter({ is_active: true }, 'sort_order', 100),
     staleTime: 60_000,
   });
 
