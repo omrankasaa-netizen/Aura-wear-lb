@@ -8,7 +8,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { CheckCircle2, Tag, X, Loader2, Gift } from 'lucide-react';
 import { validatePromoCode, calcPromoDiscount } from '@/lib/discounts';
 import { useQuery } from '@tanstack/react-query';
-import { trackInitiateCheckout, trackPurchase, newEventId } from '@/lib/meta';
+import { trackInitiateCheckout, trackPurchase, newEventId, updateAdvancedMatching, getStoredExternalIdHash } from '@/lib/meta';
 import { ttInitiateCheckout, ttTrackCompletePayment } from '@/lib/tiktok';
 import { reserveOrderStock, availableQty } from '@/lib/inventory';
 import CountryCodeSelect from '@/components/checkout/CountryCodeSelect';
@@ -504,12 +504,14 @@ export default function CheckoutPage() {
         }
       }
 
+      // Update customer lifetime spend. The accrual is computed SERVER-SIDE
+      // (membershipEngine 'accrue_spend') — clients only report the order
+      // amount, so loyalty fields can no longer be forged.
       if (customer) {
-        const newSpend = (customer.lifetime_spend_usd || 0) + grandTotal;
-        await base44.entities.Customer.update(customer.id, {
-          lifetime_spend_usd: newSpend,
-          total_orders: (customer.total_orders || 0) + 1,
-          total_spent_usd: (customer.total_spent_usd || 0) + grandTotal
+        await base44.functions.invoke('membershipEngine', {
+          action: 'accrue_spend',
+          customer_id: customer.id,
+          amount_usd: grandTotal,
         });
 
         try {
@@ -550,12 +552,27 @@ export default function CheckoutPage() {
       // Meta Purchase — browser pixel + server-side CAPI share one event_id so
       // Meta deduplicates the two. Both are best-effort and never block checkout.
       try {
+        // Refresh hashed Advanced Matching from the checkout contact data so
+        // the Purchase (and every later event) carries full EMQ identity.
+        const nameParts = String(form.customer_name || '').trim().split(/\s+/);
+        await updateAdvancedMatching({
+          email: form.customer_email,
+          phone: normalizedPhone,
+          firstName: nameParts[0],
+          lastName: nameParts.slice(1).join(' ') || undefined,
+          city: form.city,
+          state: form.district,
+          country: activeCountry?.iso,
+        });
         const metaEventId = newEventId();
         trackPurchase({ items, value: grandTotal, eventId: metaEventId });
         base44.functions.invoke('metaTrackPurchase', {
           order_id: order.id,
           event_id: metaEventId,
           event_source_url: window.location.href,
+          // Hashed anonymous visitor id so the CAPI Purchase shares the
+          // Pixel's external_id (consistent cross-channel identity).
+          external_id: getStoredExternalIdHash() || undefined,
         }).catch(() => {});
       } catch (e) {
         console.error('Meta purchase tracking failed:', e);
