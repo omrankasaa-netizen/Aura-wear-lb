@@ -85,8 +85,18 @@ function injectPixel() {
 // is even shown.
 export function initMetaPixel() {
   if (!PIXEL_ID || !hasConsent()) return;
+  captureFbclid();
   injectPixel();
   window.fbq('consent', 'grant');
+  // Enrich with the anonymous external_id + any hashed identity persisted from
+  // a previous session so every event (from the first PageView) earns EMQ.
+  setTimeout(() => updateAdvancedMatching({}), 0);
+  setTimeout(() => {
+    try {
+      const stored = getStoredAdvancedMatching();
+      if (stored && typeof window.fbq === 'function') window.fbq('init', PIXEL_ID, stored);
+    } catch { /* never throw */ }
+  }, 0);
   trackPageView(true);
 }
 
@@ -127,12 +137,160 @@ function currentPageKey() {
   return `${window.location.pathname}${window.location.search}`;
 }
 
+// ── Advanced Matching (Meta EMQ recommendations) ─────────────────────────────
+
+// SHA-256 via SubtleCrypto. Normalises (trim + lowercase) before hashing.
+async function sha256hex(str) {
+  if (!str || typeof window === 'undefined' || !window.crypto?.subtle) return undefined;
+  try {
+    const encoded = new TextEncoder().encode(String(str).trim().toLowerCase());
+    const buf = await window.crypto.subtle.digest('SHA-256', encoded);
+    return Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  } catch {
+    return undefined;
+  }
+}
+
+// Persistent anonymous visitor ID so Meta can tie cross-session events
+// together via external_id (consistent across Pixel + CAPI).
+const VID_KEY = '_aura_vid';
+function getOrCreateVisitorId() {
+  if (typeof window === 'undefined') return null;
+  try {
+    let vid = safeStorage.getItem(VID_KEY);
+    if (!vid) {
+      vid = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID()
+        : `vid-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      safeStorage.setItem(VID_KEY, vid);
+    }
+    return vid;
+  } catch {
+    return null;
+  }
+}
+
+// Capture ?fbclid=... into a _fbc cookie (millisecond creation time per Meta's
+// spec) so both the Pixel and server CAPI can read it for click attribution.
+export function captureFbclid() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  try {
+    const fbclid = new URLSearchParams(window.location.search).get('fbclid');
+    if (!fbclid) return;
+    const existing = document.cookie.split('; ').find((c) => c.startsWith('_fbc='));
+    if (existing) {
+      const val = decodeURIComponent(existing.split('=').slice(1).join('='));
+      const ts = Number(val.split('.')[2]);
+      if (val.startsWith('fb.1.') && ts > 1e12) return; // already valid (ms)
+    }
+    const fbc = `fb.1.${Date.now()}.${fbclid}`;
+    document.cookie = `_fbc=${encodeURIComponent(fbc)};path=/;max-age=${90 * 24 * 60 * 60};SameSite=Lax`;
+  } catch { /* never throw */ }
+}
+
+// Persisted hashed identity blob (SHA-256 only — raw PII never touches
+// storage or Meta). Feeds fbq('init') advanced matching AND the CAPI track
+// twins so returning visitors earn EMQ credit from the very first event.
+const AM_KEY = '_aura_am';
+
+export function getStoredAdvancedMatching() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = safeStorage.getItem(AM_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const clean = {};
+    for (const k of ['em', 'ph', 'fn', 'ln', 'ct', 'st', 'zp', 'country', 'external_id']) {
+      if (typeof parsed[k] === 'string' && /^[0-9a-f]{64}$/.test(parsed[k])) clean[k] = parsed[k];
+    }
+    return Object.keys(clean).length ? clean : null;
+  } catch {
+    return null;
+  }
+}
+
+// The persisted hashed external_id (SHA-256 of the anonymous visitor id), if
+// any. Passed to metaTrackPurchase so the server-side CAPI Purchase carries
+// the SAME external_id the Pixel events use (consistent cross-channel identity).
+export function getStoredExternalIdHash() {
+  return getStoredAdvancedMatching()?.external_id;
+}
+
+// Re-call fbq('init') with hashed Advanced Matching params (email, phone with
+// country code, names, city/state/zip, country, external_id). Called with
+// checkout/contact data; {} on boot still attaches the anonymous external_id.
+export async function updateAdvancedMatching({ email, phone, firstName, lastName, city, state, zip, country } = {}) {
+  if (typeof window === 'undefined' || typeof window.fbq !== 'function') return;
+  try {
+    const vid = getOrCreateVisitorId();
+    const normPhone = phone ? String(phone).replace(/[\s\-()]/g, '') : undefined;
+    const [em, ph, fn, ln, ct, st, zp, ctr, extId] = await Promise.all([
+      sha256hex(email),
+      sha256hex(normPhone),
+      sha256hex(firstName),
+      sha256hex(lastName),
+      sha256hex(city),
+      sha256hex(state),
+      sha256hex(zip),
+      sha256hex(country ? String(country).trim().toLowerCase() : undefined),
+      sha256hex(vid),
+    ]);
+    const userData = {};
+    if (em)    userData.em          = em;
+    if (ph)    userData.ph          = ph;
+    if (fn)    userData.fn          = fn;
+    if (ln)    userData.ln          = ln;
+    if (ct)    userData.ct          = ct;
+    if (st)    userData.st          = st;
+    if (zp)    userData.zp          = zp;
+    if (ctr)   userData.country     = ctr;
+    if (extId) userData.external_id = extId;
+    if (Object.keys(userData).length === 0) return;
+    window.fbq('init', PIXEL_ID, userData);
+    // Persist the hashed identity (INCLUDING external_id — it is the SHA-256
+    // of the random anonymous visitor id, never raw PII) for future sessions.
+    try { safeStorage.setItem(AM_KEY, JSON.stringify(userData)); } catch { /* quota */ }
+  } catch { /* tracking must never break the UX */ }
+}
+
+// Server-side CAPI twin for a browser event, sent with the SAME event_id so
+// Meta dedups the pair (recommended redundant Pixel + CAPI setup). Only
+// non-PII params + the persisted HASHED identity are forwarded; the server
+// derives ip/ua/fbp/fbc itself. Purchase never flows through here.
+function postCapiTrack(eventName, eventId, params = {}) {
+  if (!hasConsent()) return;
+  try {
+    fetch('/api/meta/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_name: eventName,
+        event_id: eventId,
+        event_source_url: typeof window !== 'undefined' ? window.location?.href : undefined,
+        user_data: getStoredAdvancedMatching() || undefined,
+        content_ids: params.content_ids,
+        contents: params.contents,
+        content_type: params.content_type,
+        value: params.value,
+        currency: params.currency,
+        num_items: params.num_items,
+      }),
+      keepalive: true,
+    }).catch(() => { /* tracking must never break the UX */ });
+  } catch { /* never throw into a handler */ }
+}
+
 export function trackPageView(force = false) {
   if (!ready()) return;
   const pageKey = currentPageKey();
   if (!force && pageKey && pageKey === lastTrackedPage) return;
   lastTrackedPage = pageKey;
-  window.fbq('track', 'PageView');
+  const eventId = newEventId();
+  window.fbq('track', 'PageView', {}, { eventID: eventId });
+  postCapiTrack('PageView', eventId);
 }
 
 // Generic passthrough for any standard event.
@@ -146,13 +304,17 @@ const CURRENCY = 'USD';
 export function trackViewContent(product, price) {
   if (!ready() || !product) return;
   const id = normalizeSku(product.sku || product.slug || product.id);
-  window.fbq('track', 'ViewContent', {
+  const params = {
     content_ids: [id],
     content_type: 'product',
     content_name: product.name,
     value: Number(price ?? product.price_usd ?? 0),
     currency: CURRENCY,
-  });
+    contents: [{ id, quantity: 1, item_price: Number(price ?? product.price_usd ?? 0) }],
+  };
+  const eventId = newEventId();
+  window.fbq('track', 'ViewContent', params, { eventID: eventId });
+  postCapiTrack('ViewContent', eventId, params);
 }
 
 export function trackAddToCart(product, quantity, price) {
@@ -160,14 +322,17 @@ export function trackAddToCart(product, quantity, price) {
   const id = normalizeSku(product.sku || product.slug || product.id);
   const qty = Number(quantity || 1);
   const unit = Number(price ?? product.price_usd ?? 0);
-  window.fbq('track', 'AddToCart', {
+  const params = {
     content_ids: [id],
     content_type: 'product',
     content_name: product.name,
     contents: [{ id, quantity: qty, item_price: unit }],
     value: Number((unit * qty).toFixed(2)),
     currency: CURRENCY,
-  });
+  };
+  const eventId = newEventId();
+  window.fbq('track', 'AddToCart', params, { eventID: eventId });
+  postCapiTrack('AddToCart', eventId, params);
 }
 
 // items: cart items [{ product, quantity, price }]
@@ -178,14 +343,17 @@ export function trackInitiateCheckout(items, value) {
     quantity: Number(i.quantity || 1),
     item_price: Number(i.price ?? i.product?.price_usd ?? 0),
   }));
-  window.fbq('track', 'InitiateCheckout', {
+  const params = {
     content_ids: contents.map((c) => c.id),
     content_type: 'product',
     contents,
     num_items: contents.reduce((s, c) => s + c.quantity, 0),
     value: Number(value ?? 0),
     currency: CURRENCY,
-  });
+  };
+  const eventId = newEventId();
+  window.fbq('track', 'InitiateCheckout', params, { eventID: eventId });
+  postCapiTrack('InitiateCheckout', eventId, params);
 }
 
 // Fire the browser Purchase event with a shared eventID for CAPI dedup.
