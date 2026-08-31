@@ -602,6 +602,26 @@ function membershipEngine(body) {
     return { success: true, creditsGranted: bronzeCredits };
   }
 
+  if (action === 'accrue_spend') {
+    // Server-side lifetime-spend accrual after checkout. Previously the client
+    // PUT the new totals directly onto the Customer record, which let ANY
+    // guest overwrite spend/tier fields on ANY customer (inflating their own
+    // lifetime spend unlocks free-delivery credits). Now the client reports
+    // only the order amount and the server performs the monotonic increment.
+    const customer = getRecord('Customer', customer_id);
+    if (!customer) return { _status: 404, error: 'Customer not found' };
+    const amount = Number(body.amount_usd);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 100000) {
+      return { _status: 400, error: 'invalid amount_usd' };
+    }
+    updateRecord('Customer', customer_id, {
+      lifetime_spend_usd: (customer.lifetime_spend_usd || 0) + amount,
+      total_orders: (customer.total_orders || 0) + 1,
+      total_spent_usd: (customer.total_spent_usd || 0) + amount,
+    });
+    return { success: true };
+  }
+
   if (action === 'check_tier_upgrade') {
     const customer = getRecord('Customer', customer_id);
     if (!customer) return { _status: 404, error: 'Customer not found' };
@@ -1111,7 +1131,7 @@ function resolveMetaPurchaseEventTime(order) {
   return eventTime;
 }
 
-async function metaTrackPurchase({ order_id, event_id, event_source_url } = {}) {
+async function metaTrackPurchase({ order_id, event_id, event_source_url, external_id, _signals } = {}) {
   if (!order_id) { const e = new Error('order_id required'); e.status = 400; throw e; }
   const order = getRecord('Order', order_id);
   if (!order) { const e = new Error('Order not found'); e.status = 404; throw e; }
@@ -1124,6 +1144,12 @@ async function metaTrackPurchase({ order_id, event_id, event_source_url } = {}) 
     eventId: event_id || order_id,
     eventSourceUrl: event_source_url,
     eventTime,
+    // Request signals (ip/ua/fbp/fbc) are attached server-side by the
+    // /api/functions route — never trusted from the client body.
+    signals: _signals && typeof _signals === 'object' ? _signals : {},
+    // The browser's hashed (SHA-256) external_id so the CAPI Purchase shares
+    // the Pixel's cross-session identity. Validated 64-hex downstream.
+    externalIdHash: typeof external_id === 'string' ? external_id : undefined,
   });
   if (result.sent) {
     updateRecord('Order', order_id, {
