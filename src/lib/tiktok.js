@@ -1,12 +1,14 @@
 // TikTok Pixel + Events API integration for AURA — the TikTok twin of
 // lib/meta.js, installed ALONGSIDE the Meta Pixel (never replacing it).
 //
-// Fully env-driven and consent-gated. If VITE_TIKTOK_PIXEL_ID is unset the
-// whole module is a silent no-op (the ttq script is never even injected), so
-// the storefront works with zero config. Consent is SHARED with the Meta Pixel
-// (the same banner + localStorage key in lib/meta.js): TikTok has no fbq-style
-// consent('revoke') API, so the gate here is that no ttq call happens until
-// hasConsent() is true.
+// Fully env-driven. If VITE_TIKTOK_PIXEL_ID is unset the whole module is a
+// silent no-op (the ttq script is never even injected), so the storefront
+// works with zero config. Consent is SHARED with the Meta Pixel (the same
+// banner + localStorage key in lib/meta.js) and follows the same IMPLIED
+// CONSENT model: hasConsent() is true by default and only becomes false once
+// the shopper explicitly declines. TikTok has no fbq-style consent('revoke')
+// API, so the gate here is that no ttq call happens once hasConsent() is
+// false.
 //
 // Event naming follows TikTok's standard events; content_id is the normalized
 // product SKU everywhere so browser events match the TikTok catalog feed
@@ -51,20 +53,22 @@ function injectPixel() {
   /* eslint-enable */
 }
 
-// Call once on app boot. Injects the pixel and, when the shopper already
-// granted consent on a previous visit, fires the initial page view.
+// Call once on app boot. Under implied consent this fires for every shopper
+// who hasn't explicitly declined — including brand-new visitors — injecting
+// the pixel and sending the initial page view immediately.
 export function initTikTokPixel() {
   if (!PIXEL_ID || !hasConsent()) return;
   injectPixel();
   ttTrackPageView(true);
 }
 
-// Call from the consent banner's accept handler (after grantConsent()): counts
-// the page the visitor accepted on, since views were withheld until now.
+// Call from the consent banner's explicit Accept handler. injectPixel()'s own
+// `injected` guard makes this idempotent — initTikTokPixel() already injected
+// the pixel and fired the first page view on mount under implied consent, so
+// this does NOT re-fire ttTrackPageView (avoids double-counting the visit).
 export function onConsentGranted() {
   if (!PIXEL_ID) return;
   injectPixel();
-  ttTrackPageView(true);
 }
 
 // Guard: only emit when configured AND consented AND ttq is present.

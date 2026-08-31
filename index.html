@@ -8,8 +8,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="manifest" href="/manifest.json" />
 
-    <!-- Keep first paint strictly first-party: Meta/TikTok are loaded only after
-         marketing consent, so their hosts are intentionally NOT preconnected
+    <!-- Keep first paint strictly first-party: Meta/TikTok/GA are injected by
+         React after mount (implied consent — skipped only if the shopper has
+         explicitly declined), so their hosts are intentionally NOT preconnected
          here. Warm up just the product-image CDN, which is needed for LCP. -->
     <link rel="preconnect" href="https://image.aura-lb.shop" crossorigin />
     <link rel="dns-prefetch" href="https://image.aura-lb.shop" />

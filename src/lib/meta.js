@@ -1,10 +1,17 @@
 // Meta (Facebook) Pixel integration for AURA.
 //
-// Fully env-driven and consent-gated. If VITE_META_PIXEL_ID is unset the whole
-// module is a silent no-op, so the storefront works with zero config. The pixel
-// is loaded with consent REVOKED by default (GDPR-style) and only starts firing
-// after the shopper accepts tracking via the consent banner. The choice is
-// remembered in localStorage.
+// Fully env-driven. If VITE_META_PIXEL_ID is unset the whole module is a
+// silent no-op, so the storefront works with zero config.
+//
+// IMPLIED CONSENT MODEL: tracking fires by default for every shopper as soon
+// as the pixel is configured; only an EXPLICIT "Decline" click on the consent
+// banner stops it (see hasConsent() below). Lebanon/MENA e-commerce isn't
+// under GDPR's strict prior-opt-in mandate, and the previous default-revoke
+// model silently dropped any shopper who bounced, ignored, or never clicked
+// the banner from every pixel (Meta, TikTok, and even GA4, which all read
+// this same hasConsent() flag) — undercounting real traffic in Ads Manager
+// and shrinking Website Custom Audiences well below the site's actual visitor
+// count. The choice is remembered in localStorage.
 
 import { safeStorage } from '@/lib/safeStorage';
 
@@ -30,8 +37,10 @@ function storeConsent(value) {
   safeStorage.setItem(CONSENT_KEY, value);
 }
 
+// True unless the shopper has EXPLICITLY declined. No stored choice yet (new
+// visitor) counts as implied consent, matching the default-on model above.
 export function hasConsent() {
-  return getConsent() === 'granted';
+  return getConsent() !== 'denied';
 }
 
 // Whether we still need to ask (pixel configured and no decision recorded yet).
@@ -39,8 +48,9 @@ export function shouldAskConsent() {
   return isPixelConfigured() && getConsent() == null;
 }
 
-// Inject the Meta Pixel base code once. Loads with consent revoked; no events
-// are sent to Meta until grantConsent() flips it.
+// Inject the Meta Pixel base code once. Runs as soon as hasConsent() is true
+// (implied consent by default) and is only skipped once the shopper has
+// explicitly declined.
 let injected = false;
 function injectPixel() {
   if (injected || typeof window === 'undefined' || !PIXEL_ID) return;
@@ -59,18 +69,20 @@ function injectPixel() {
   /* eslint-enable */
 
   // Consent is GRANTED before init, never revoked-first: injectPixel only runs
-  // after the shopper opts in (initMetaPixel/grantConsent both gate on it), and
-  // the current fbevents.js drops a pixel init that arrives while consent is
-  // revoked — with revoke-first the pixel never initializes at all and every
-  // event is silently swallowed (verified live: getState().pixels stayed []).
-  // denyConsent() still revokes on the live pixel when the shopper declines.
+  // when hasConsent() is true (default for new visitors, or explicit Accept),
+  // and the current fbevents.js drops a pixel init that arrives while consent
+  // is revoked — with revoke-first the pixel never initializes at all and
+  // every event is silently swallowed (verified live: getState().pixels
+  // stayed []). denyConsent() still revokes on the live pixel when the
+  // shopper explicitly declines.
   window.fbq('consent', 'grant');
   window.fbq('init', PIXEL_ID);
 }
 
-// Call once on app boot. Injects the pixel (still revoked) and, if the shopper
-// already granted consent in a previous visit, re-grants + fires the initial
-// PageView.
+// Call once on app boot. Under implied consent this fires for every shopper
+// who hasn't explicitly declined — including brand-new visitors — injecting
+// the pixel and sending the initial PageView immediately, before the banner
+// is even shown.
 export function initMetaPixel() {
   if (!PIXEL_ID || !hasConsent()) return;
   injectPixel();
@@ -81,9 +93,13 @@ export function initMetaPixel() {
 export function grantConsent() {
   storeConsent('granted');
   if (!PIXEL_ID) return;
+  // Under implied consent, initMetaPixel() already injected the pixel and
+  // fired the first PageView on mount (hasConsent() was already true before
+  // this banner was even clicked). injectPixel()'s own `injected` guard makes
+  // this call safe/idempotent — do NOT re-fire trackPageView here, or every
+  // shopper who explicitly clicks Accept gets double-counted.
   injectPixel();
   window.fbq('consent', 'grant');
-  trackPageView(true);
 }
 
 export function denyConsent() {

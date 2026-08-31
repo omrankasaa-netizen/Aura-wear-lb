@@ -59,6 +59,9 @@ function mapGa4Item(itemLike, defaults = {}) {
   };
 }
 
+// Under implied consent this fires for every shopper who hasn't explicitly
+// declined — including brand-new visitors — injecting gtag and sending the
+// initial page_view immediately.
 export function initGa4() {
   if (!MEASUREMENT_ID || !hasConsent()) return;
   injectGtag();
@@ -66,11 +69,14 @@ export function initGa4() {
   gaTrackPageView(true);
 }
 
+// Call from the consent banner's explicit Accept handler. injectGtag()/
+// configureGtag() are idempotent (own `injected`/`configured` guards) —
+// initGa4() already ran on mount under implied consent, so this does NOT
+// re-fire gaTrackPageView (avoids double-counting the visit).
 export function onGa4ConsentGranted() {
   if (!MEASUREMENT_ID) return;
   injectGtag();
   configureGtag();
-  gaTrackPageView(true);
 }
 
 export function gaTrackPageView(force = false) {
