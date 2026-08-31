@@ -714,7 +714,6 @@ export function shapeEntityReadsForRole(entity, records, user, query) {
 
   const rank = ROLE_RANK[user?.role] ?? -1;
   const canSelfServe = rank < ROLE_RANK.staff; // guest or customer only
-  const orderNumberLookup = !!(query && Object.prototype.hasOwnProperty.call(query, 'order_number'));
   const orderIdScoped = !!(query && Object.prototype.hasOwnProperty.call(query, 'order_id'));
 
   const shaped = arr.map((rec) => {
@@ -722,7 +721,7 @@ export function shapeEntityReadsForRole(entity, records, user, query) {
     if (!OWNERSHIP_MONEY_ENTITIES.has(entity)) return stripFields(rec, fields); // always strip
     let keepMoney = false;
     if (entity === 'Order') {
-      keepMoney = ownsOrder(rec, user) || (canSelfServe && orderNumberLookup);
+      keepMoney = ownsOrder(rec, user);
     } else if (entity === 'OrderItem') {
       // Line items are fetched scoped by order_id; allow only for guest/customer
       // self-service (admin-tier readers get them stripped).
@@ -786,8 +785,10 @@ export function authorizeEntityRead(entity, user, query, byId = false) {
 
   switch (entity) {
     case 'Order':
-      // Guest receipt by order_number, or own orders by email/id.
-      if (hasKey(query, 'order_number')) return { allow: true };
+      // Own orders only, pinned to the requester's identity. (Guests track
+      // orders through the phone-verified POST /api/orders/track endpoint —
+      // the old order_number allow listed full order PII to anyone who
+      // guessed a sequential order number.)
       if (user && (eqEmail(query.customer_email, user.email) || query.customer_id === user.id)) {
         return { allow: true };
       }
