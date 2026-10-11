@@ -1,1 +1,1 @@
-2026-08-22T00:00:00Z — redeploy trigger after PR #81 merge (Railway retry)
+2026-10-12T00:00:00Z — redeploy trigger: UptimeRobot health check down 3 days, forcing Railway rebuild + improved health endpoint

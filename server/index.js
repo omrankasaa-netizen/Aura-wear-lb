@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   initSchema, createRecord, getRecord, updateRecord, deleteRecord,
-  queryRecords, ENTITIES,
+  queryRecords, ENTITIES, db,
 } from './db.js';
 import {
   registerUser, authenticate, signToken, setSessionCookie, clearSessionCookie,
@@ -33,6 +33,8 @@ import { buildTiktokFeedRow, buildTiktokFeedCsv, isTikTokConfigured } from './ti
 import {
   getProductBySlug, injectProductMeta, buildPreloadedProductPayload, injectPreloadedProduct,
 } from './productMeta.js';
+
+console.log(`[boot] AURA WEAR server starting at ${new Date().toISOString()}`);
 
 // Build the verification-code email HTML.
 function otpEmailHtml(code) {
@@ -163,8 +165,16 @@ function handleError(res, e) {
   res.status(status).json({ error: e?.message || 'Internal error' });
 }
 
-// ─── Health route (public, no auth, no DB) ──────────────────────────────────
-app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
+// ─── Health route (public, no auth, lightweight DB check) ───────────────────
+app.get('/api/health', (_req, res) => {
+  try {
+    db.prepare('SELECT 1').get();
+    res.json({ status: 'ok', db: 'connected', timestamp: new Date().toISOString() });
+  } catch (e) {
+    console.error('[health] DB check failed:', e?.message);
+    res.status(503).json({ status: 'error', db: 'disconnected', error: e?.message });
+  }
+});
 
 // ─── Auth routes ──────────────────────────────────────────────────────────────
 app.get('/api/auth/me', (req, res) => {
@@ -846,9 +856,7 @@ app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '30d', immutable: true 
 if (fs.existsSync(DIST)) {
   // Serve the PWA manifest and robots.txt with their correct content types,
   // ahead of both express.static and the SPA history fallback. Without these,
-  // Serve the PWA manifest, robots.txt and llms.txt with their correct content
-  // types, ahead of both express.static and the SPA history fallback. Without
-  // these, they fall through to the catch-all and return the index.html shell
+  // they fall through to the catch-all and return the index.html shell
   // as text/html — an invalid manifest that some in-app WebViews (e.g.
   // Facebook) choke on.
   app.get('/manifest.json', (req, res) => {
