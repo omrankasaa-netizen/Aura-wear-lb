@@ -22,13 +22,13 @@ export default function Home() {
   return (
     <div className="flex flex-col">
       <HeroSection />
-      <FeaturedCategories />
       <ProductRow
         title="New Arrivals"
         titleAr="الوصولات الجديدة"
         filter={{ is_new: true, status: 'Active' }}
         viewAllLink="/shop?category=new-arrivals"
       />
+      <FeaturedCategories />
       <ProductRow
         title="Best Sellers"
         titleAr="الأكثر مبيعاً"
