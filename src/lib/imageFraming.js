@@ -134,10 +134,10 @@ export function normalizeImages(images) {
 // through Cloudflare's image-resizing endpoint (/cdn-cgi/image/<opts>/<orig>).
 // Cloudflare resizes once, re-encodes to AVIF/WebP, and edge-caches each size.
 //
-// Requires "Image Resizing / Transformations" enabled on the AURA Cloudflare
-// zone. Guarded: we only rewrite URLs on AURA's own image host(s), and the
-// CF_IMAGE_RESIZE flag instantly reverts to originals if it's ever disabled.
-const CF_IMAGE_RESIZE = String(import.meta.env?.VITE_CF_IMAGE_RESIZE ?? 'true') === 'true';
+// DISABLED by default (2026-10-26): /cdn-cgi/image/ returns 404 on
+// image.aura-lb.shop — the feature is not enabled or misconfigured on the
+// Cloudflare zone. Set VITE_CF_IMAGE_RESIZE=true once it's working.
+const CF_IMAGE_RESIZE = String(import.meta.env?.VITE_CF_IMAGE_RESIZE ?? 'false') === 'true';
 
 // Hosts whose images can be safely routed through Cloudflare resizing.
 // Set this to AURA's own R2 custom image domain. Configurable via Vite env
@@ -208,6 +208,9 @@ export const IMAGE_PLACEHOLDER =
 // against the direct origin URL (prefix stripped) before giving up. After the
 // retry (or for non-proxy URLs), swap in the neutral placeholder exactly once
 // (guards against an error loop if the placeholder itself fails).
+//
+// IMPORTANT: also wipes srcSet so the browser can't override the corrected src
+// with another broken candidate from the set.
 export function handleImageError(e) {
   const img = e.currentTarget;
   if (img.dataset.fallbackApplied) return;
@@ -216,9 +219,13 @@ export function handleImageError(e) {
     const direct = img.src.replace(/\/cdn-cgi\/image\/[^/]+/, '');
     if (direct !== img.src) {
       img.src = direct;
+      img.srcset = '';          // prevent srcSet from overriding the retry
+      img.sizes = '';
       return;
     }
   }
   img.dataset.fallbackApplied = '1';
   img.src = IMAGE_PLACEHOLDER;
+  img.srcset = '';              // clear srcSet so placeholder isn't overridden
+  img.sizes = '';
 }
