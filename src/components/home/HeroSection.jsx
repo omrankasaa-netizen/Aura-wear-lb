@@ -19,15 +19,17 @@ export default function HeroSection() {
     <section className="relative overflow-hidden bg-secondary">
       <div className="relative aspect-[4/5] sm:aspect-[16/10] lg:aspect-[16/7] w-full">
         {imgUrl ? (
-          // LCP image: eager + high priority so the hero paints fast, and the
-          // onError retry recovers from cold-cache resize-proxy failures.
-          // srcset/sizes let the browser pick the smallest adequate variant
-          // (mobile pulls ~600w instead of the 1200w large).
-          <img src={cmsImageSrc(imgUrl, 'large')}
-            srcSet={`${cmsImageSrc(imgUrl, 'thumb')} 320w, ${cmsImageSrc(imgUrl, 'card')} 600w, ${cmsImageSrc(imgUrl, 'large')} 1200w`}
-            sizes="100vw"
+          // LCP image: eager + high priority so the hero paints fast.
+          // key={imgUrl} forces a fresh <img> mount whenever the CMS image
+          // changes, so the browser always loads the new URL immediately.
+          <img
+            key={imgUrl}
+            src={cmsImageSrc(imgUrl, 'large')}
             width={1600} height={700}
-            alt="" loading="eager" fetchPriority="high" decoding="async" onError={handleImageError} className="absolute inset-0 w-full h-full object-cover" />
+            alt="" loading="eager" fetchPriority="high" decoding="async"
+            onError={handleImageError}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-secondary via-stone to-secondary" />
         )}
@@ -41,7 +43,7 @@ export default function HeroSection() {
             className="max-w-2xl"
             dir={lang === 'ar' ? 'rtl' : 'ltr'}
           >
-            <p className="eyebrow text-white/80 mb-3">{BRAND.name} · {t('Men’s Apparel', 'أزياء رجالية')}</p>
+            <p className="eyebrow text-white/80 mb-3">{BRAND.name} · {t('Men\u2019s Apparel', 'أزياء رجالية')}</p>
             <h1 className="font-display font-bold uppercase text-white leading-[0.95] tracking-tight text-[34px] sm:text-5xl lg:text-6xl mb-4">
               {title}
             </h1>
